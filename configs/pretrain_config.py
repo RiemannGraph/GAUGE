@@ -20,8 +20,6 @@ class PretrainConfig(ModelConfig):
     resume_temp_checkpoint: bool = False
     warmup_epochs: int = 1
 
-    loss_reduction: str = 'mean'
-
     # Path
     checkpoint_dir: str = "checkpoints/pretrain/"
     log_path: str = "logs/pretrain/pretrain.log"
@@ -51,8 +49,6 @@ def get_pretrain_parser():
                         help='Whether to resume from latest checkpoint')
     parser.add_argument('--warmup_epochs', type=int, default=1,
                         help="Number of warmup epochs to compute prototype loss")
-    parser.add_argument('--loss_reduction', type=str, default='mean',
-                        help='Type of loss reduction')
 
     # Config IO
     parser.add_argument('--save_config', action="store_true",

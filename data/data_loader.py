@@ -53,5 +53,6 @@ def load_few_shot_single_graph_data(configs, data_name, k_shot, num_splits, num_
         dataset = AttributedGraphDataset(root, name=data_name.lower(), transform=transform)
     else:
         raise ValueError('Invalid data_name')
-    train_mask, val_mask, test_mask = graph_few_shot_splits(dataset, k_shot, num_val, num_splits)
-    return dataset, train_mask, val_mask, test_mask
+    data = dataset[0]
+    train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+    return dataset, data, train_mask, val_mask, test_mask

@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch_geometric.loader import DataLoader
+from torch_geometric.loader import NeighborLoader
 
 from cores.models import GraphTrivializeModel
 from data import (
@@ -79,7 +79,7 @@ class AdaptTrainer:
             model.train()
             for epoch in range(self.start_epoch, self.configs.task_epochs):
                 epoch_start_time = time.time()
-                train_loss, _, train_metric = self._train_epoch(train_loaders[trial], model, optimizer, trial)
+                train_loss, train_metric = self._train_epoch(train_loaders[trial], model, optimizer, trial)
                 scheduler.step()
                 epoch_time = time.time() - epoch_start_time
 
@@ -93,7 +93,7 @@ class AdaptTrainer:
 
                 # Evaluation
                 if (epoch + 1) % self.configs.eval_interval == 0:
-                    val_loss, _, val_metric, _, _ = eval_step(val_loaders[trial], model, self.device,
+                    val_loss, val_metric = eval_step(val_loaders[trial], model, self.configs.batch_size, self.device,
                                            **AdaptTrainer.TASK_CONFIGS[self.task_type],
                                                   metric=self.configs.metric)
                     self.logger.info(f'Epoch {epoch:03d} | Val {self.configs.metric.upper()}: {val_metric * 100:.2f}%')
@@ -116,31 +116,22 @@ class AdaptTrainer:
             self.logger.info(f"===========Loading best checkpoint from {self.configs.checkpoint_dir}/model_best.pth===========")
             load_checkpoint(f"{self.configs.checkpoint_dir}/model_best.pth", model)
             model.eval()
-            test_loss, task_loss, test_metric, holo_loss, curv_loss = eval_step(test_loaders[trial], model, self.device,
+            test_loss, test_metric = eval_step(test_loaders[trial], model, self.configs.batch_size, self.device,
                                             **AdaptTrainer.TASK_CONFIGS[self.task_type],
                                             metric=self.configs.metric)
             self.logger.info("=====================================================")
             info = f'Trial {trial:02d} | Test {self.configs.metric.upper()}: {test_metric * 100:.2f}%' \
-                             f'| Test Loss: {test_loss:.6f} ' \
-                             f'| Test Task Loss: {task_loss:.6f}' \
-                             f'| Test Holonomy Loss: {holo_loss:.6f} ' \
-                             f'| Test Curvature Loss: {curv_loss:.6f} '
+                             f'| Test Loss: {test_loss:.6f} '
             self.logger.info(info)
             self.logger.info("=====================================================")
             total_metric.append(test_metric)
             total_test_loss.append(test_loss)
-            total_task_loss.append(task_loss)
-            total_holo_loss.append(holo_loss)
-            total_curv_loss.append(curv_loss)
             with open(f"./results/{self.configs.data_name}.txt", "a") as f:
                 f.write(info + "\n")
             f.close()
         info = f'Final Test {self.configs.metric.upper()}: ' \
                 f'{np.mean(total_metric) * 100:.2f} \u00B1 {np.std(total_metric) * 100:.2f} % \n' \
-                f'Final Test Loss: {np.mean(total_test_loss):.6f} \u00B1 {np.std(total_test_loss):.6f} \n' \
-               f'Final Test Task Loss: {np.mean(total_task_loss):.6f} \u00B1 {np.std(total_task_loss):.6f} \n' \
-               f'Final Test Holonomy Loss: {np.mean(total_holo_loss):.6f} \u00B1 {np.std(total_holo_loss):.6f} \n' \
-               f'Final Test Curvature Loss: {np.mean(total_curv_loss):.6f} \u00B1 {np.std(total_curv_loss):.6f}'
+                f'Final Test Loss: {np.mean(total_test_loss):.6f} \u00B1 {np.std(total_test_loss):.6f} \n'
         self.logger.info(info)
         with open(f"./results/{self.configs.data_name}.txt", "a") as f:
             f.write(info + "\n")
@@ -148,68 +139,68 @@ class AdaptTrainer:
         f.close()
 
     def _train_epoch(self, train_loader, model, optimizer, trial):
-        loss, task_loss, acc, _, _ = train_step(train_loader, optimizer, model, self.device,
+        loss, acc = train_step(train_loader, optimizer, model, self.configs.batch_size, self.device,
                                **AdaptTrainer.TASK_CONFIGS[self.task_type],
                                metric=self.configs.metric)
-        return loss, task_loss, acc
+        return loss, acc
 
     def get_loaders(self, configs):
         train_loaders = []
         val_loaders = []
         test_loaders = []
         if configs.task_type == "node_cls":
-            dataset, train_mask, val_mask, test_mask = load_few_shot_single_graph_data(configs, configs.data_name,
+            dataset, data, train_mask, val_mask, test_mask = load_few_shot_single_graph_data(configs, configs.data_name,
                                                                                       configs.k_shot,
                                                                                       configs.num_trials,
                                                                                       configs.num_val)
             num_classes = dataset.num_classes
             num_features = dataset.num_features
             for t in range(configs.num_trials):
-                train_loaders.append(DataLoader(dataset[train_mask[:, t]],
+                train_loaders.append(NeighborLoader(data, input_nodes=train_mask[:, t],
                                                 batch_size=configs.batch_size,
-                                                shuffle=True,
-                                                exclude_keys=["edge_attr"]))
-                val_loaders.append(DataLoader(dataset[val_mask[:, t]],
+                                                shuffle=True, num_neighbors=configs.num_neighbors
+                                                ))
+                val_loaders.append(NeighborLoader(data, input_nodes=val_mask[:, t],
                                               batch_size=configs.batch_size,
-                                              shuffle=False,
-                                              exclude_keys=["edge_attr"]))
-                test_loaders.append(DataLoader(dataset[test_mask[:, t]],
+                                              shuffle=False, num_neighbors=configs.num_neighbors
+                                              ))
+                test_loaders.append(NeighborLoader(data, input_nodes=test_mask[:, t],
                                                batch_size=configs.batch_size,
-                                               shuffle=False,
-                                               exclude_keys=["edge_attr"]))
-        elif configs.task_type == "graph_cls":
-            dataset, train_mask, val_mask, test_mask = load_few_shot_multi_graph_data(configs, configs.data_name,
-                                                           configs.k_shot, configs.num_trials,
-                                                           configs.num_val)
-            num_classes = dataset.num_classes
-            num_features = dataset.num_features
-            for t in range(configs.num_trials):
-                train_loaders.append(DataLoader(dataset[train_mask[:, t]],
-                                                batch_size=configs.batch_size,
-                                                shuffle=True))
-                val_loaders.append(DataLoader(dataset[val_mask[:, t]],
-                                              batch_size=configs.batch_size,
-                                              shuffle=False))
-                test_loaders.append(DataLoader(dataset[test_mask[:, t]],
-                                               batch_size=configs.batch_size,
-                                               shuffle=False))
-
-        elif configs.task_type == "link_cls":
-            data, train_sets, val_sets, test_sets = load_few_shot_link_graph_data(configs, configs.data_name,
-                                                                 configs.k_shot, configs.num_trials,
-                                                                 configs.num_val)
-            num_classes = configs.num_way_link
-            num_features = data.x.shape[-1]
-            for t in range(configs.num_trials):
-                train_loaders.append(LinkDataLoader(train_sets[t],
-                                                    batch_size=configs.batch_size,
-                                                    shuffle=True))
-                val_loaders.append(LinkDataLoader(val_sets[t],
-                                                  batch_size=configs.batch_size,
-                                                  shuffle=False))
-                test_loaders.append(LinkDataLoader(test_sets[t],
-                                                   batch_size=configs.batch_size,
-                                                   shuffle=False))
+                                               shuffle=False, num_neighbors=configs.num_neighbors
+                                               ))
+        # elif configs.task_type == "graph_cls":
+        #     dataset, train_mask, val_mask, test_mask = load_few_shot_multi_graph_data(configs, configs.data_name,
+        #                                                    configs.k_shot, configs.num_trials,
+        #                                                    configs.num_val)
+        #     num_classes = dataset.num_classes
+        #     num_features = dataset.num_features
+        #     for t in range(configs.num_trials):
+        #         train_loaders.append(DataLoader(dataset[train_mask[:, t]],
+        #                                         batch_size=configs.batch_size,
+        #                                         shuffle=True))
+        #         val_loaders.append(DataLoader(dataset[val_mask[:, t]],
+        #                                       batch_size=configs.batch_size,
+        #                                       shuffle=False))
+        #         test_loaders.append(DataLoader(dataset[test_mask[:, t]],
+        #                                        batch_size=configs.batch_size,
+        #                                        shuffle=False))
+        #
+        # elif configs.task_type == "link_cls":
+        #     data, train_sets, val_sets, test_sets = load_few_shot_link_graph_data(configs, configs.data_name,
+        #                                                          configs.k_shot, configs.num_trials,
+        #                                                          configs.num_val)
+        #     num_classes = configs.num_way_link
+        #     num_features = data.x.shape[-1]
+        #     for t in range(configs.num_trials):
+        #         train_loaders.append(LinkDataLoader(train_sets[t],
+        #                                             batch_size=configs.batch_size,
+        #                                             shuffle=True))
+        #         val_loaders.append(LinkDataLoader(val_sets[t],
+        #                                           batch_size=configs.batch_size,
+        #                                           shuffle=False))
+        #         test_loaders.append(LinkDataLoader(test_sets[t],
+        #                                            batch_size=configs.batch_size,
+        #                                            shuffle=False))
         else:
             raise NotImplementedError
         return (train_loaders, val_loaders, test_loaders), num_classes, num_features

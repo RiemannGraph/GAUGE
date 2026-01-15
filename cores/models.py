@@ -48,3 +48,11 @@ class GraphTrivializeModel(nn.Module):
 
     def loss(self, z, frame, graph, batch_size: int = None):
         return self.loss_fn(z, frame, graph.edge_index, batch_size)
+
+    def frozen(self):
+        for param in self.parameters():
+            param.requires_grad_(False)
+
+    def unfrozen(self):
+        for param in self.parameters():
+            param.requires_grad_(True)

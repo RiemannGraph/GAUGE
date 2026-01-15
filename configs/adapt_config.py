@@ -21,10 +21,7 @@ class AdaptionConfig(ModelConfig):
     metric: str = "acc"
 
     # Training
-    align_knn: int = 3
-    align_samples: int = 1000
     drop: int = 0.1
-    align_coef: float = 0.1
     batch_size: int = 128
     lr_task: float = 1e-3
     task_weight_decay: float = 1e-5
@@ -47,7 +44,7 @@ def get_adaption_parser():
     parser.add_argument("--task_type", type=str, default="node_cls", choices=["node_cls", "graph_cls", "link_cls"],
                         help="Type of downstream task.")
     parser.add_argument("--pretrained_checkpoint", type=str,
-                        default="checkpoints/pretrain/ogbn-arxiv_Reddit_FB15k_237_PROTEINS_HIV/pretrain_epoch_5.pth",
+                        default="checkpoints/pretrain/ogbn-arxiv_Reddit_FB15k_237/pretrain_epoch_5.pth",
                         help="file path of pretrained model checkpoint.")
     parser.add_argument("--metric", type=str, default="acc", choices=["acc", "auc"])
 
@@ -62,11 +59,7 @@ def get_adaption_parser():
                         help="Proportion of validation set.")
 
     # Training
-    parser.add_argument('--align_knn', type=int, default=3)
-    parser.add_argument('--align_samples', type=int, default=1000)
     parser.add_argument("--drop", type=float, default=0.2)
-    parser.add_argument("--align_coef", type=float, default=1.,
-                        help="Coefficient for alignment loss.")
     parser.add_argument("--batch_size", type=int, default=256,
                         help="Batch size for task training.")
     parser.add_argument("--lr_task", type=float, default=1e-3,
@@ -110,35 +103,22 @@ def parse_adaption_config(remaining_argv=None) -> AdaptionConfig:
 
     config = AdaptionConfig(
         num_neighbors=args.num_neighbors,
-        k_hops=args.k_hops,
         root=args.root,
         pretrain_single_graph_data=args.pretrain_single_graph_data,
-        pretrain_multi_graph_data=args.pretrain_multi_graph_data,
-        nv_dim=args.nv_dim,
-        nv_batch_size=args.nv_batch_size,
-        nv_walk_length=args.nv_walk_length,
-        nv_context_size=args.nv_context_size,
-        nv_lr=args.nv_lr,
-        nv_walks_per_node=args.nv_walks_per_node,
-        nv_p=args.nv_p,
-        nv_q=args.nv_q,
-        nv_num_epochs=args.nv_num_epochs,
         num_workers=args.num_workers,
         n_layers=args.n_layers,
+        n_smooth_layers=args.n_smooth_layers,
         in_dim=args.in_dim,
         hid_dim=args.hid_dim,
+        fiber_dim=args.fiber_dim,
         att_dim=args.att_dim,
         bias=args.bias,
         act_str=args.act_str,
         drop=args.drop,
-        conv_name=args.conv_name,
         normalize=args.normalize,
         norm_str=args.norm_str,
         temperature=args.temperature,
-        ema_alpha=args.ema_alpha,
-        knn=args.knn,
-        geo_regular_coef=args.geo_regular_coef,
-
+        loss_reduction=args.loss_reduction,
 
         data_name=args.data_name,
         pretrained_checkpoint=args.pretrained_checkpoint,
@@ -148,9 +128,6 @@ def parse_adaption_config(remaining_argv=None) -> AdaptionConfig:
         num_way_link=args.num_way_link,
         num_trials=args.num_trials,
         num_val=args.num_val,
-        align_knn=args.align_knn,
-        align_samples=args.align_samples,
-        align_coef=args.align_coef,
         batch_size=args.batch_size,
         lr_task=args.lr_task,
         task_weight_decay=args.task_weight_decay,
@@ -158,16 +135,12 @@ def parse_adaption_config(remaining_argv=None) -> AdaptionConfig:
         max_grad_norm=args.max_grad_norm,
         eval_interval=args.eval_interval,
         resume_checkpoint=args.resume_checkpoint,
-        patience=args.patience,
-
-        num_generators=args.num_generators,
+        patience=args.patience
     )
 
 
     dir_name = ""
     for d in config.pretrain_single_graph_data:
-        dir_name += f"{d}_"
-    for d in config.pretrain_multi_graph_data:
         dir_name += f"{d}_"
 
     # Paths

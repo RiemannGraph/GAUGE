@@ -28,6 +28,8 @@ class ModelConfig:
 
     temperature: float = 1.0
 
+    loss_reduction: str = 'mean'
+
     """Shared Loader"""
     num_workers: int = 2
 
@@ -65,6 +67,8 @@ def add_model_config(parser: ArgumentParser):
                        help="Normalization type")
     group.add_argument('--temperature', type=float, default=1.0,
                        help='Temperature')
+    parser.add_argument('--loss_reduction', type=str, default='mean',
+                        help='Type of loss reduction')
 
     parser.add_argument('--num_workers', type=int, default=0,
                         help='Number of workers for data loading')
