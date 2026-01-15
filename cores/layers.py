@@ -1,29 +1,7 @@
+import torch
 import torch.nn as nn
-from torch_geometric.nn import GCNConv, SAGEConv, GINConv
-
-
-CONV_MAP = {
-    "gcn": GCNConv,
-    "sage": SAGEConv,
-    "gin": GINConv
-}
-
-
-class GNNLayer(nn.Module):
-    def __init__(self, conv_name: str, in_dim: int, out_dim: int,
-                 normalize: bool = True, bias: bool = True,
-                 norm_str: str = "ln", act_str: str = "relu", drop=0.1):
-        super().__init__()
-        self.conv = CONV_MAP[conv_name](in_channels=in_dim, out_channels=out_dim,
-                                             normalize=normalize, bias=bias)
-        self.norm = NormModule(norm_str, out_dim)
-        self.fc = FeedForwardLayer(out_dim, out_dim, out_dim, bias, act_str, drop)
-
-    def forward(self, x, edge_index, edge_weight):
-        x = self.conv(x, edge_index, edge_weight)
-        x = self.norm(x)
-        x = self.fc(x)
-        return x
+from torch_scatter import scatter_mean
+from torch_geometric.nn import GCNConv
 
 
 class FeedForwardLayer(nn.Module):
@@ -42,7 +20,80 @@ class FeedForwardLayer(nn.Module):
         return x
 
 
-import torch.nn as nn
+class MultiHeadMPLayer(nn.Module):
+    def __init__(self, fiber_dim, in_dim: int, out_dim: int,
+                 bias: bool = True, norm_str: str = "ln",
+                 act_str: str = "relu", drop=0.1):
+        super().__init__()
+        self.out_dim = out_dim
+        self.dropout = nn.Dropout(drop)
+        self.head_lin = nn.Linear(in_dim, out_dim * fiber_dim, bias=bias)
+        self.score_lin = nn.Linear(2 * out_dim // fiber_dim, 1, bias=False)
+        self.fc = FeedForwardLayer(out_dim // fiber_dim, out_dim, out_dim, bias, act_str, drop)
+
+    def forward(self, x, edge_index):
+        x_multi_head = self.dropout(self.lin(x)).reshape(-1, self.num_heads, self.out_dim)    # [N, r, d // r]
+        src, dst = edge_index[0], edge_index[1]
+        x_src, x_dst = x_multi_head[src], x_multi_head[dst]  # [E, r, d // r]
+        scores = self.score_lin(torch.cat([x_src, x_dst], dim=-1)).softmax(1)  # [E, r, 1]
+        x = scatter_mean(scores * x_src, index=dst, dim=0)  # [N, r, d // r]
+        x = self.fc(x)  # [N, r, d]
+        frame = torch.qr(x.transpose(-1, -2))[0].transpose(-1, -2)
+        return x, frame
+
+
+class FrameSmoothModule(nn.Module):
+    def __init__(self, n_layers: int, fiber_dim: int, hid_dim: int,
+                 bias: bool = True, norm_str: str = "ln",
+                 act_str: str = "relu", drop=0.1):
+        super().__init__()
+        self.fiber_dim = fiber_dim
+        uni_dim = hid_dim * fiber_dim
+        self.layers = nn.ModuleList([
+            FrameSmoothLayer(uni_dim, bias=bias, norm_str=norm_str, drop=drop)
+        ])
+        for _ in range(n_layers - 1):
+            self.layers.append(
+                FrameSmoothLayer(uni_dim, bias=bias, norm_str=norm_str, drop=drop)
+            )
+        self.out_norm = NormModule(norm_str, uni_dim)
+        self.out_fc = FeedForwardLayer(uni_dim, uni_dim, uni_dim, bias, act_str, drop)
+
+    def forward(self, frame, edge_index):
+        f_vec = frame.reshape(frame.shape[0], -1)
+        for layer in self.layers:
+            f_vec = layer(f_vec, edge_index)
+        f_vec = self.out_fc(f_vec)
+        f_vec = self.out_norm(f_vec)
+        f = f_vec.reshape(f_vec.shape[0], self.fiber_dim, -1)
+        f = torch.qr(f.transpose(-1, -2))[0].transpose(-1, -2)
+        return f
+
+
+class FrameSmoothLayer(nn.Module):
+    def __init__(self, hid_dim, bias: bool = True,
+                 norm_str: str = "ln", drop=0.1):
+        super().__init__()
+        self.dropout = nn.Dropout(drop)
+        self.gated_lin = nn.Linear(hid_dim, hid_dim, bias=False)
+        self.agg = GCNConv(hid_dim, hid_dim, bias=bias, normalize=True)
+        self.out_norm = NormModule(norm_str, hid_dim)
+
+    def forward(self, f_vec, edge_index):
+        """
+
+        params f_vec: [N, r * d]
+        """
+        gates = self.gated_score(f_vec, edge_index)
+        f_vec = gates * self.agg(f_vec, edge_index) + (1 - gates) * self.dropout(f_vec)
+        f_vec = self.out_norm(f_vec)
+        return f_vec
+
+    def gated_score(self, f, edge_index):
+        f = self.gated_lin(f)
+        src, dst = edge_index[0], edge_index[1]
+        f = f - scatter_mean(f[src], dst, dim=0)
+        return torch.sigmoid(f)
 
 
 class ActivateModule(nn.Module):

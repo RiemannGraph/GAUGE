@@ -1,14 +1,8 @@
 import torch
-from torch_geometric.loader import DataLoader
-from torch.utils.data import ConcatDataset, WeightedRandomSampler
-from torch_geometric.data import Batch
-from cores.models import GraphGlue
-from data import (
-    load_pretrain_single_graph_data,
-    load_pretrain_multi_graph_data,
-    Node2GraphDataset)
+from torch_geometric.loader import NeighborLoader
+from cores.models import GraphTrivializeModel
+from data import load_pretrain_single_graph_data
 from utils import (
-    search_triangles,
     save_checkpoint,
     load_checkpoint,
     get_latest_checkpoint,
@@ -28,11 +22,8 @@ class Pretrainer:
         self.final_model_path = None
         self.configs = configs
         self.pretrain_single_graph_data = configs.pretrain_single_graph_data
-        self.pretrain_multi_graph_data = configs.pretrain_multi_graph_data
-        self.dataset_dict = {k: v for v, k in
-                             enumerate(self.pretrain_single_graph_data + self.pretrain_multi_graph_data)}
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = GraphGlue(configs).to(self.device)
+        self.model = GraphTrivializeModel(configs).to(self.device)
         self.logger = create_logger(configs.log_path) if logger is None else logger
         self.start_epoch = 0
         self.start_time = None
@@ -120,25 +111,18 @@ class Pretrainer:
         total_loss = 0.0
         total_batches = 0
 
-        # ===== Mix training for locality =====
-        self.logger.info("---------------Mix training for locality----------------")
-        loader = self._get_mix_loader()
+        loader = self._get_loader()
         loader_start_time = time.time()
         for batch_idx, data in enumerate(loader):
             optimizer.zero_grad()
             data = data.to(self.device)
-            z, z_tan = self.model(data)
-            local_loss = self.model.local_struct_loss(z, z_tan)
+            z, frame = self.model(data)
+            loss = self.model.loss(z, frame, data)
 
-            if epoch >= self.configs.warmup_epochs and epoch >= 1:
-                proto_loss = self.model.prototype_loss(z, data.data_name_map)
-                local_loss += proto_loss
-
-            local_loss.backward()
+            loss.backward()
             optimizer.step()
-            self.model.update_prototype(z.detach(), z_tan.detach(), data.data_name_map)
 
-            total_loss += local_loss.item()
+            total_loss += loss.item()
             total_batches += 1
 
             if (batch_idx + 1) % self.configs.log_interval == 0:
@@ -146,134 +130,10 @@ class Pretrainer:
                     epoch=epoch,
                     batch_idx=batch_idx + 1,
                     dataset_len=len(loader),
-                    loss=local_loss.item(),
+                    loss=loss.item(),
                     start_loader_time=loader_start_time,
                     batches_done=batch_idx + 1
                 )
-
-            del data, z, z_tan
-            torch.cuda.empty_cache()
-        # gc.collect()
-
-        # ===== Mix training for global distribution =====
-        self.logger.info("---------------Mix training for global distribution----------------")
-        loader_start_time = time.time()
-        for batch_idx, data in enumerate(loader):
-            optimizer.zero_grad()
-            data = data.to(self.device)
-            z, z_tan = self.model(data)
-            with torch.no_grad():
-                knn_edge_index, _ = self.model.knn_graph(z, self.configs.knn,
-                                                         is_cross=True,
-                                                         data_name_map=data.data_name_map,
-                                                         is_to_undirected=True)
-                triple_paths, _, _ = search_triangles(knn_edge_index,
-                                                      self.configs.num_path_samples_global,
-                                                      self.configs.path_sample_times_global,
-                                                      return_relabel_mapping=True)
-            geo_loss = 0.
-            for t in range(self.configs.path_sample_times_global):
-                geo_loss += self.model.manifold_gluing_loss(z_tan, triple_paths[t])
-            geo_loss /= self.configs.path_sample_times_global
-            geo_loss.backward()
-            optimizer.step()
-
-            total_loss += geo_loss.item()
-            total_batches += 1
-
-            if (batch_idx + 1) % self.configs.log_interval == 0:
-                self._log_progress(
-                    epoch=epoch,
-                    batch_idx=batch_idx + 1,
-                    dataset_len=len(loader),
-                    loss=geo_loss.item(),
-                    start_loader_time=loader_start_time,
-                    batches_done=batch_idx + 1
-                )
-
-        del data, z, z_tan
-        torch.cuda.empty_cache()
-
-        # ===== Refine manifold structure from locality =====
-        self.logger.info("--------------Refine manifold structure from locality---------------")
-        for data_name in self.pretrain_single_graph_data:
-            self.logger.info(f"===============Refining {data_name} =======================")
-            data = load_pretrain_single_graph_data(self.configs, data_name)
-            dataset = Node2GraphDataset(data, self.configs.k_hops,
-                                        self.configs.num_neighbors,
-                                        self.dataset_dict[data_name])
-            with torch.no_grad():
-                triple_paths, mappings, _ = search_triangles(data.edge_index,
-                                                             self.configs.num_path_samples_local,
-                                                             self.configs.path_sample_times_local,
-                                                             return_relabel_mapping=True)
-            loader_start_time = time.time()
-            for t in range(self.configs.path_sample_times_local):
-                input_node_idx = mappings[t][torch.unique(triple_paths[t])]
-                graph = Batch.from_data_list([dataset[i] for i in input_node_idx.cpu().tolist()]).to(self.device)
-                optimizer.zero_grad()
-                z, z_tan = self.model(graph)
-                geo_loss = self.model.manifold_gluing_loss(z_tan, triple_paths[t])
-                geo_loss.backward()
-                optimizer.step()
-
-                total_loss += geo_loss.item()
-                total_batches += 1
-
-                if (t + 1) % self.configs.log_interval == 0:
-                    self._log_progress(
-                        epoch=epoch,
-                        batch_idx=t + 1,
-                        dataset_len=self.configs.path_sample_times_local,
-                        loss=geo_loss.item(),
-                        start_loader_time=loader_start_time,
-                        batches_done=t + 1
-                    )
-                del z, z_tan, graph
-                torch.cuda.empty_cache()
-
-            del data, dataset, triple_paths, mappings
-            torch.cuda.empty_cache()
-            gc.collect()
-
-        for data_name in self.pretrain_multi_graph_data:
-            self.logger.info(f"===============Refining {data_name} =======================")
-            dataset = load_pretrain_multi_graph_data(self.configs, data_name, self.dataset_dict[data_name])
-            loader = DataLoader(dataset, batch_size=self.configs.batch_size, shuffle=True,
-                                num_workers=self.configs.num_workers)
-            loader_start_time = time.time()
-            for batch_idx, data in enumerate(loader):
-                optimizer.zero_grad()
-                data = data.to(self.device)
-                z, z_tan = self.model(data)
-                knn_edge_index, _ = self.model.knn_graph(z, self.configs.knn, is_to_undirected=True)
-                triple_paths, _, _ = search_triangles(knn_edge_index,
-                                                      self.configs.num_path_samples_global,
-                                                      self.configs.path_sample_times_global,
-                                                      return_relabel_mapping=True)
-                geo_loss = 0.
-                for t in range(self.configs.path_sample_times_global):
-                    geo_loss += self.model.manifold_gluing_loss(z_tan, triple_paths[t])
-                geo_loss /= self.configs.path_sample_times_global
-                geo_loss.backward()
-                optimizer.step()
-
-                total_loss += geo_loss.item()
-                total_batches += 1
-
-                if (batch_idx + 1) % self.configs.log_interval == 0:
-                    self._log_progress(
-                        epoch=epoch,
-                        batch_idx=batch_idx + 1,
-                        dataset_len=len(loader),
-                        loss=geo_loss.item(),
-                        start_loader_time=loader_start_time,
-                        batches_done=batch_idx + 1
-                    )
-
-                del data, z, z_tan
-            del loader, dataset
-            # gc.collect()
 
         # Log
         self._log_epoch_summary(epoch, start_epoch_time)
@@ -333,32 +193,9 @@ class Pretrainer:
         epoch_duration = time.time() - start_epoch_time
         self.epoch_times.append(epoch_duration)
 
-    def _get_mix_loader(self):
-        datasets = []
+    def _get_loader(self):
+        data = load_pretrain_single_graph_data(self.configs, "Computers")
 
-        for data_name in self.pretrain_single_graph_data:
-            data = load_pretrain_single_graph_data(self.configs, data_name)
-            datasets.append(Node2GraphDataset(data,
-                                              self.configs.k_hops,
-                                              self.configs.num_neighbors,
-                                              self.dataset_dict[data_name])
-                            )
-
-        for data_name in self.pretrain_multi_graph_data:
-            datasets.append(
-                load_pretrain_multi_graph_data(self.configs,
-                                               data_name,
-                                               self.dataset_dict[data_name])
-            )
-
-        weights = []
-        for d in datasets:
-            n = len(d)
-            weights.extend([1.0 / n] * n)
-        weights = torch.tensor(weights)
-
-        datasets = ConcatDataset(datasets)
-        sampler = WeightedRandomSampler(weights, num_samples=len(datasets), replacement=True)
-        loader = DataLoader(datasets, batch_size=self.configs.batch_size, sampler=sampler,
+        loader = NeighborLoader(data, batch_size=self.configs.batch_size, num_neighbors=self.configs.num_neighbors,
                             num_workers=self.configs.num_workers, persistent_workers=False)
         return loader

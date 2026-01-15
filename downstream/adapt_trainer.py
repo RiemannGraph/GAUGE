@@ -7,12 +7,9 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch_geometric.loader import DataLoader
 
-from cores.models import GraphGlue
+from cores.models import GraphTrivializeModel
 from data import (
-    load_few_shot_multi_graph_data,
     load_few_shot_single_graph_data,
-    load_few_shot_link_graph_data,
-    LinkDataLoader
 )
 from downstream.adapter import GraphGlueAdapter
 from downstream.tasks import train_step, eval_step
@@ -58,7 +55,7 @@ class AdaptTrainer:
             f.write(f"Pretraining Model: {self.configs.pretrained_checkpoint}\n")
         f.close()
         for trial in range(self.configs.num_trials):
-            pretrained_model = GraphGlue(self.configs)
+            pretrained_model = GraphTrivializeModel(self.configs)
             load_checkpoint(self.configs.pretrained_checkpoint, pretrained_model, map_location='cuda')
             model = GraphGlueAdapter(self.configs, num_features, pretrained_model,
                                      self.configs.task_type, num_classes).to(self.device)

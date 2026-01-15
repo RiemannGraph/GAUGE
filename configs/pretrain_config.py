@@ -10,10 +10,6 @@ class PretrainConfig(ModelConfig):
     # Training
     drop: float = 0.1
     batch_size: int = 128
-    num_path_samples_global: int = 100
-    num_path_samples_local: int = 100
-    path_sample_times_global: int = 20
-    path_sample_times_local: int = 500
     pretrain_epochs: int = 100
     lr_pretrain: float = 1e-3
     pretrain_weight_decay: float = 1e-5
@@ -35,14 +31,6 @@ def get_pretrain_parser():
     # Training
     parser.add_argument('--batch_size', type=int, default=512,
                         help='Batch size for data loading')
-    parser.add_argument('--num_path_samples_global', type=int, default=2000,
-                       help='Number of triangle samples for global construction')
-    parser.add_argument('--path_sample_times_global', type=int, default=5,
-                        help='Times of path samples for global construction')
-    parser.add_argument('--num_path_samples_local', type=int, default=200,
-                        help='Number of triangle samples for local construction')
-    parser.add_argument('--path_sample_times_local', type=int, default=1000,
-                        help='Times of path samples for local construction')
     parser.add_argument('--pretrain_epochs', type=int, default=10,
                         help='Total pretrain epochs')
     parser.add_argument('--drop', type=float, default=0.1,
@@ -87,35 +75,23 @@ def parse_pretrain_config(remaining_argv=None) -> PretrainConfig:
                     setattr(args, key, value)
 
     config = PretrainConfig(
-        k_hops=args.k_hops,
         num_neighbors=args.num_neighbors,
         root=args.root,
         pretrain_single_graph_data=args.pretrain_single_graph_data,
-        pretrain_multi_graph_data=args.pretrain_multi_graph_data,
-        nv_dim=args.nv_dim,
-        nv_batch_size=args.nv_batch_size,
-        nv_walk_length=args.nv_walk_length,
-        nv_context_size=args.nv_context_size,
-        nv_lr=args.nv_lr,
-        nv_walks_per_node=args.nv_walks_per_node,
-        nv_p=args.nv_p,
-        nv_q=args.nv_q,
-        nv_num_epochs=args.nv_num_epochs,
+
         num_workers=args.num_workers,
         n_layers=args.n_layers,
+        n_smooth_layers=args.n_smooth_layers,
         in_dim=args.in_dim,
         hid_dim=args.hid_dim,
         att_dim=args.att_dim,
+        fiber_dim=args.fiber_dim,
         bias=args.bias,
         act_str=args.act_str,
         drop=args.drop,
-        conv_name=args.conv_name,
         normalize=args.normalize,
         norm_str=args.norm_str,
         temperature=args.temperature,
-        ema_alpha=args.ema_alpha,
-        knn=args.knn,
-        geo_regular_coef=args.geo_regular_coef,
 
         batch_size=args.batch_size,
         pretrain_epochs=args.pretrain_epochs,
@@ -126,19 +102,12 @@ def parse_pretrain_config(remaining_argv=None) -> PretrainConfig:
         save_interval=args.save_interval,
         resume_checkpoint=args.resume_checkpoint,
         warmup_epochs=args.warmup_epochs,
-        num_path_samples_global=args.num_path_samples_global,
-        num_path_samples_local=args.num_path_samples_local,
-        path_sample_times_global=args.path_sample_times_global,
-        path_sample_times_local=args.path_sample_times_local,
-        num_generators=args.num_generators,
     )
 
     # Path
     config.log_path = "logs/pretrain/pretrain.log"
     dir_name = ""
     for d in config.pretrain_single_graph_data:
-        dir_name += f"{d}_"
-    for d in config.pretrain_multi_graph_data:
         dir_name += f"{d}_"
 
     config.checkpoint_dir = f"checkpoints/pretrain/{dir_name[:-1]}"
