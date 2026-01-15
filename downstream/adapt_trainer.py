@@ -11,7 +11,7 @@ from cores.models import GraphTrivializeModel
 from data import (
     load_few_shot_single_graph_data,
 )
-from downstream.adapter import GraphGlueAdapter
+from downstream.adapter import GraphTrivialAdapter
 from downstream.tasks import train_step, eval_step
 from utils.checkpoints import (
     load_checkpoint,
@@ -47,9 +47,6 @@ class AdaptTrainer:
         # Train loop
         total_metric = []
         total_test_loss = []
-        total_task_loss = []
-        total_holo_loss = []
-        total_curv_loss = []
         with open(f"./results/{self.configs.data_name}.txt", "a") as f:
             f.write(f"============={self.configs.k_shot}-Shot {self.configs.task_type}=================\n")
             f.write(f"Pretraining Model: {self.configs.pretrained_checkpoint}\n")
@@ -57,8 +54,8 @@ class AdaptTrainer:
         for trial in range(self.configs.num_trials):
             pretrained_model = GraphTrivializeModel(self.configs)
             load_checkpoint(self.configs.pretrained_checkpoint, pretrained_model, map_location='cuda')
-            model = GraphGlueAdapter(self.configs, num_features, pretrained_model,
-                                     self.configs.task_type, num_classes).to(self.device)
+            model = GraphTrivialAdapter(self.configs, num_features, pretrained_model,
+                                        self.configs.task_type, num_classes).to(self.device)
             optimizer = Adam(
                 model.parameters(),
                 lr=self.configs.lr_task,

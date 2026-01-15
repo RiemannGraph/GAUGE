@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from downstream.adapter import GraphGlueAdapter
+from downstream.adapter import GraphTrivialAdapter
 from sklearn.metrics import roc_auc_score
 
 
@@ -22,7 +22,7 @@ def _compute_metrics(preds_list, trues_list, metric: str = "acc"):
 
 def train_step(loader,
                optimizer,
-               model: GraphGlueAdapter,
+               model: GraphTrivialAdapter,
                batch_size,
                device,
                label_attr='y',
@@ -54,7 +54,7 @@ def train_step(loader,
 
 
 def eval_step(loader,
-              model: GraphGlueAdapter,
+              model: GraphTrivialAdapter,
               batch_size,
               device,
               label_attr='y',

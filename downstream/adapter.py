@@ -1,16 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.utils import to_undirected
 
 from cores.models import GraphTrivializeModel
 from torch_geometric.data import Data
-from cores.layers import ActivateModule
-from utils import search_triangles
-from utils.math import diagonal_metric, matrix_log_diag, knn_graphs
 
 
-class GraphGlueAdapter(nn.Module):
+class GraphTrivialAdapter(nn.Module):
     def __init__(self, configs,
                  feature_dim,
                  pretrained_model: GraphTrivializeModel,
@@ -24,7 +20,7 @@ class GraphGlueAdapter(nn.Module):
         :param task_type: [node_cls, graph_cls, edge_cls]
         :param num_cls: classes number
         """
-        super(GraphGlueAdapter, self).__init__()
+        super(GraphTrivialAdapter, self).__init__()
         assert task_type in ["node_cls", "graph_cls", "link_cls"], "the task type must be one of [node_cls, graph_cls, link_cls]"
         self.configs = configs
         self.input_lin = nn.Linear(feature_dim, configs.in_dim)
