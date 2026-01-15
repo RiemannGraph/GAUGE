@@ -39,13 +39,13 @@ def add_model_config(parser: ArgumentParser):
     group.add_argument('--pretrain_single_graph_data', type=str, nargs='+',
                        default=["ogbn-arxiv", "Reddit", "FB15k_237"],
                        help='node-level pretraining datasets')
-    parser.add_argument('--num_neighbors', type=int, nargs="+", default=[20, 20, 5],
+    parser.add_argument('--num_neighbors', type=int, nargs="+", default=[10, 10],
                         help='maximum number of nodes per graph')
 
     # model configurations
     group.add_argument('--n_layers', type=int, default=2,
                        help='Number of GNN layers')
-    group.add_argument('--n_smooth_layers', type=int, default=3,
+    group.add_argument('--n_smooth_layers', type=int, default=2,
                        help='Number of Frame Smooth layers')
     group.add_argument('--in_dim', type=int, default=128,
                        help='Input feature dimension')

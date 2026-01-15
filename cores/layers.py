@@ -26,17 +26,18 @@ class MultiHeadMPLayer(nn.Module):
                  act_str: str = "relu", drop=0.1):
         super().__init__()
         self.out_dim = out_dim
+        self.fiber_dim = fiber_dim
         self.dropout = nn.Dropout(drop)
         self.head_lin = nn.Linear(in_dim, out_dim * fiber_dim, bias=bias)
-        self.score_lin = nn.Linear(2 * out_dim // fiber_dim, 1, bias=False)
-        self.fc = FeedForwardLayer(out_dim // fiber_dim, out_dim, out_dim, bias, act_str, drop)
+        self.score_lin = nn.Linear(2 * out_dim, 1, bias=False)
+        self.fc = FeedForwardLayer(out_dim, out_dim, out_dim, bias, act_str, drop)
 
     def forward(self, x, edge_index):
-        x_multi_head = self.dropout(self.lin(x)).reshape(-1, self.num_heads, self.out_dim)    # [N, r, d // r]
+        x_multi_head = self.dropout(self.head_lin(x)).reshape(-1, self.fiber_dim, self.out_dim)    # [N, r, d]
         src, dst = edge_index[0], edge_index[1]
-        x_src, x_dst = x_multi_head[src], x_multi_head[dst]  # [E, r, d // r]
+        x_src, x_dst = x_multi_head[src], x_multi_head[dst]  # [E, r, d]
         scores = self.score_lin(torch.cat([x_src, x_dst], dim=-1)).softmax(1)  # [E, r, 1]
-        x = scatter_mean(scores * x_src, index=dst, dim=0)  # [N, r, d // r]
+        x = scatter_mean(scores * x_src, index=dst, dim=0)  # [N, r, d]
         x = self.fc(x)  # [N, r, d]
         frame = torch.qr(x.transpose(-1, -2))[0].transpose(-1, -2)
         return x, frame
@@ -48,23 +49,28 @@ class FrameSmoothModule(nn.Module):
                  act_str: str = "relu", drop=0.1):
         super().__init__()
         self.fiber_dim = fiber_dim
-        uni_dim = hid_dim * fiber_dim
+        self.squeeze_lin = nn.Linear(fiber_dim * hid_dim, hid_dim, bias=bias)
         self.layers = nn.ModuleList([
-            FrameSmoothLayer(uni_dim, bias=bias, norm_str=norm_str, drop=drop)
+            FrameSmoothLayer(hid_dim, bias=bias, norm_str=norm_str, drop=drop)
         ])
         for _ in range(n_layers - 1):
             self.layers.append(
-                FrameSmoothLayer(uni_dim, bias=bias, norm_str=norm_str, drop=drop)
+                FrameSmoothLayer(hid_dim, bias=bias, norm_str=norm_str, drop=drop)
             )
-        self.out_norm = NormModule(norm_str, uni_dim)
-        self.out_fc = FeedForwardLayer(uni_dim, uni_dim, uni_dim, bias, act_str, drop)
+
+        self.out_fc = FeedForwardLayer(hid_dim, hid_dim, hid_dim, bias, act_str, drop)
+        self.out_norm = NormModule(norm_str, hid_dim)
+        self.lift_lin = nn.Linear(hid_dim, fiber_dim * hid_dim, bias=bias)
 
     def forward(self, frame, edge_index):
         f_vec = frame.reshape(frame.shape[0], -1)
+        f_vec = self.squeeze_lin(f_vec)
         for layer in self.layers:
             f_vec = layer(f_vec, edge_index)
         f_vec = self.out_fc(f_vec)
         f_vec = self.out_norm(f_vec)
+        f_vec = self.lift_lin(f_vec)
+
         f = f_vec.reshape(f_vec.shape[0], self.fiber_dim, -1)
         f = torch.qr(f.transpose(-1, -2))[0].transpose(-1, -2)
         return f

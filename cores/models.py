@@ -22,7 +22,7 @@ class GraphTrivializeLayer(nn.Module):
 
     def forward(self, z, edge_index, return_frame: bool = False):
         z, frame = self.multi_head_mp(z, edge_index)    # [N, d]
-        frame = self.f_smooth(frame)    # [N, r, d]
+        frame = self.f_smooth(frame, edge_index)    # [N, r, d]
         x = self.horizon_lin(torch.einsum('ikj, ij->ik', frame, z)) # [N, r]
         z = torch.einsum('ikj, ik->ij', frame, x) + self.vertical_lin(z)
         if return_frame:
