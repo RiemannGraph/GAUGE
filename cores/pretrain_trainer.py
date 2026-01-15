@@ -117,7 +117,7 @@ class Pretrainer:
             optimizer.zero_grad()
             data = data.to(self.device)
             z, frame = self.model(data)
-            loss = self.model.loss(z, frame, data)
+            loss = self.model.loss(z, frame, data, self.configs.batch_size)
 
             loss.backward()
             optimizer.step()
@@ -196,6 +196,6 @@ class Pretrainer:
     def _get_loader(self):
         data = load_pretrain_single_graph_data(self.configs, "Computers")
 
-        loader = NeighborLoader(data, batch_size=self.configs.batch_size, num_neighbors=self.configs.num_neighbors,
+        loader = NeighborLoader(data, input_nodes=None, batch_size=self.configs.batch_size, num_neighbors=self.configs.num_neighbors,
                             num_workers=self.configs.num_workers, persistent_workers=False)
         return loader

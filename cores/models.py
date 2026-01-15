@@ -17,11 +17,11 @@ class GraphTrivializeLayer(nn.Module):
         self.f_smooth = FrameSmoothModule(configs.n_smooth_layers, configs.fiber_dim,
                                           configs.hid_dim, configs.bias,
                                           configs.norm_str, configs.act_str, configs.drop)
-        self.horizon_lin = nn.Linear(configs.hid_dim, configs.hid_dim, bias=False)
+        self.horizon_lin = nn.Linear(configs.fiber_dim, configs.fiber_dim, bias=False)
         self.vertical_lin = nn.Linear(configs.hid_dim, configs.hid_dim, bias=configs.bias)
 
     def forward(self, z, edge_index, return_frame: bool = False):
-        z, frame = self.multi_head_mp(z, edge_index)    # [N, d]
+        frame = self.multi_head_mp(z, edge_index)    # [N, d]
         frame = self.f_smooth(frame, edge_index)    # [N, r, d]
         x = self.horizon_lin(torch.einsum('ikj, ij->ik', frame, z)) # [N, r]
         z = torch.einsum('ikj, ik->ij', frame, x) + self.vertical_lin(z)
@@ -46,5 +46,5 @@ class GraphTrivializeModel(nn.Module):
         z, frame = self.layers[-1](z, edge_index, return_frame=True)
         return z, frame
 
-    def loss(self, z, frame, graph):
-        return self.loss_fn(z, frame, graph.edge_index)
+    def loss(self, z, frame, graph, batch_size: int = None):
+        return self.loss_fn(z, frame, graph.edge_index, batch_size)

@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from torch_scatter import scatter_mean, scatter_sum
+from torch_scatter import scatter
 
 EPS = 1e-6
 
@@ -12,12 +12,13 @@ class CentralNodeEmbedPrediction(nn.Module):
         assert reduction in ['mean', 'sum'], "reduction must be 'mean' or 'sum'"
         self.reduction = reduction
 
-    def forward(self, z, frame, edge_index):
+    def forward(self, z, frame, edge_index, batch_size: int = None):
         """
 
         :param z: [N, d]
         :param frame: [N, r, d]
         :param edge_index: [E, ]
+        :param batch_size:
         :return: loss
         """
         x = torch.einsum('ikj, ij -> ik', frame, z) # [N, r]
@@ -25,13 +26,11 @@ class CentralNodeEmbedPrediction(nn.Module):
         z_norm = torch.einsum('ikj, ik -> ij', frame, x_norm)   # [N, d]
 
         src, dst = edge_index[0], edge_index[1]
-        z_norm_neighbor = z_norm[dst]
+        z_norm_neighbor = z_norm[src]
 
-        if self.reduction == 'mean':
-            z_pred = scatter_mean(z_norm_neighbor, src, dim=0)
-        elif self.reduction == 'sum':
-            z_pred = scatter_sum(z_norm_neighbor, src, dim=0)
+        z_pred = scatter(z_norm_neighbor, dst, dim=0, dim_size=z.shape[0], reduce=self.reduction)
+
+        if batch_size is not None:
+            return F.mse_loss(z_pred[: batch_size], z_norm[: batch_size])
         else:
-            raise NotImplementedError
-
-        return F.mse_loss(z_pred, z_norm)
+            return F.mse_loss(z_pred, z_norm)

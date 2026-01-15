@@ -53,7 +53,7 @@ def add_model_config(parser: ArgumentParser):
                        help='Hidden dimension')
     group.add_argument('--att_dim', type=int, default=512,
                        help='Attention dimension (if used)')
-    group.add_argument('--fiber_dim', type=int, default=32,
+    group.add_argument('--fiber_dim', type=int, default=8,
                        help='Number of generators in FM')
     group.add_argument('--act_str', type=str, default='relu',
                        help='Activation function')

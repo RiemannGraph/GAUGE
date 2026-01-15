@@ -28,19 +28,19 @@ class MultiHeadMPLayer(nn.Module):
         self.out_dim = out_dim
         self.fiber_dim = fiber_dim
         self.dropout = nn.Dropout(drop)
-        self.head_lin = nn.Linear(in_dim, out_dim * fiber_dim, bias=bias)
-        self.score_lin = nn.Linear(2 * out_dim, 1, bias=False)
-        self.fc = FeedForwardLayer(out_dim, out_dim, out_dim, bias, act_str, drop)
+        self.head_lin = nn.Linear(in_dim, out_dim, bias=bias)
+        self.score_lin = nn.Linear(2 * out_dim // fiber_dim, 1, bias=False)
+        self.fc = FeedForwardLayer(out_dim // fiber_dim, out_dim, out_dim, bias, act_str, drop)
 
     def forward(self, x, edge_index):
-        x_multi_head = self.dropout(self.head_lin(x)).reshape(-1, self.fiber_dim, self.out_dim)    # [N, r, d]
+        x_multi_head = self.dropout(self.head_lin(x)).reshape(-1, self.fiber_dim, self.out_dim // self.fiber_dim)    # [N, r, d // r]
         src, dst = edge_index[0], edge_index[1]
-        x_src, x_dst = x_multi_head[src], x_multi_head[dst]  # [E, r, d]
+        x_src, x_dst = x_multi_head[src], x_multi_head[dst]  # [E, r, d // r]
         scores = self.score_lin(torch.cat([x_src, x_dst], dim=-1)).softmax(1)  # [E, r, 1]
-        x = scatter_mean(scores * x_src, index=dst, dim=0)  # [N, r, d]
+        x = scatter_mean(scores * x_src, index=dst, dim=0, dim_size=x.shape[0])  # [N, r, d // r]
         x = self.fc(x)  # [N, r, d]
         frame = torch.qr(x.transpose(-1, -2))[0].transpose(-1, -2)
-        return x, frame
+        return frame
 
 
 class FrameSmoothModule(nn.Module):
@@ -98,7 +98,7 @@ class FrameSmoothLayer(nn.Module):
     def gated_score(self, f, edge_index):
         f = self.gated_lin(f)
         src, dst = edge_index[0], edge_index[1]
-        f = f - scatter_mean(f[src], dst, dim=0)
+        f = f - scatter_mean(f[src], dst, dim=0, dim_size=f.shape[0])
         return torch.sigmoid(f)
 
 
