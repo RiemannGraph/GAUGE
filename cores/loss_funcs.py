@@ -21,16 +21,20 @@ class CentralNodeEmbedPrediction(nn.Module):
         :param batch_size:
         :return: loss
         """
-        x = torch.einsum('ikj, ij -> ik', frame, z) # [N, r]
+        x = torch.einsum('ikj, ij -> ik', frame, z)  # [N, r]
         x_norm = F.normalize(x, dim=-1, p=2)
-        z_norm = torch.einsum('ikj, ik -> ij', frame, x_norm)   # [N, d]
 
         src, dst = edge_index[0], edge_index[1]
-        z_norm_neighbor = z_norm[src]
+        x_norm_neighbor = x_norm[src]
 
-        z_pred = scatter(z_norm_neighbor, dst, dim=0, dim_size=z.shape[0], reduce=self.reduction)
+        x_pred = scatter(x_norm_neighbor, dst, dim=0, dim_size=x.shape[0], reduce=self.reduction)
 
         if batch_size is not None:
-            return F.mse_loss(z_pred[: batch_size], z_norm[: batch_size])
-        else:
-            return F.mse_loss(z_pred, z_norm)
+            x_norm = x_norm[: batch_size]
+            x_pred = x_pred[: batch_size]
+            frame = frame[: batch_size]
+
+        x_error = x_norm - x_pred
+        z_error = torch.einsum('ikj, ik -> ij', frame, x_error)  # [N, d]
+
+        return (z_error ** 2).sum(-1).mean()

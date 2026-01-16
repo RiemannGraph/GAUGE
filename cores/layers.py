@@ -39,7 +39,7 @@ class MultiHeadMPLayer(nn.Module):
         scores = self.score_lin(torch.cat([x_src, x_dst], dim=-1)).softmax(1)  # [E, r, 1]
         x = scatter_mean(scores * x_src, index=dst, dim=0, dim_size=x.shape[0])  # [N, r, d // r]
         x = self.fc(x)  # [N, r, d]
-        frame = torch.qr(x.transpose(-1, -2))[0].transpose(-1, -2)
+        frame = torch.linalg.qr(x.transpose(-1, -2))[0].transpose(-1, -2)
         return frame
 
 
@@ -72,7 +72,7 @@ class FrameSmoothModule(nn.Module):
         f_vec = self.lift_lin(f_vec)
 
         f = f_vec.reshape(f_vec.shape[0], self.fiber_dim, -1)
-        f = torch.qr(f.transpose(-1, -2))[0].transpose(-1, -2)
+        f = torch.linalg.qr(f.transpose(-1, -2))[0].transpose(-1, -2)
         return f
 
 
