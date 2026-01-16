@@ -1,7 +1,8 @@
 import torch_geometric.transforms as T
 from torch_geometric.datasets import (
     Reddit, AttributedGraphDataset,
-    Planetoid, Amazon, FacebookPagePage
+    Planetoid, Amazon, FacebookPagePage,
+    HeterophilousGraphDataset
 )
 from ogb.nodeproppred import PygNodePropPredDataset
 from data.data_transform import FlattenLabels, UnifyFeatureDims
@@ -26,6 +27,8 @@ def load_pretrain_single_graph_data(configs, data_name: str):
         dataset = AttributedGraphDataset(root, name=data_name.lower(), transform=transform)
     elif data_name in ["Cora", "CiteSeers", "PubMed"]:
         dataset = Planetoid(root, data_name, transform=transform)
+    elif data_name in ["Roman-empire", "Amazon-ratings", "Questions"]:
+        dataset = HeterophilousGraphDataset(root, data_name, transform=transform)
     else:
         raise ValueError('Invalid data_name')
     data = dataset[0]
@@ -51,6 +54,8 @@ def load_few_shot_single_graph_data(configs, data_name, k_shot, num_splits, num_
         dataset = FacebookPagePage(f"{root}/{data_name}", transform=transform)
     elif data_name == 'PPI':
         dataset = AttributedGraphDataset(root, name=data_name.lower(), transform=transform)
+    elif data_name in ["Roman-empire", "Amazon-ratings", "Questions"]:
+        dataset = HeterophilousGraphDataset(root, data_name, transform=transform)
     else:
         raise ValueError('Invalid data_name')
     data = dataset[0]

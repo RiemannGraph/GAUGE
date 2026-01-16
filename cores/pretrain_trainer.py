@@ -11,7 +11,8 @@ from utils import (
     format_time)
 import os
 import time
-import gc
+import itertools
+import tqdm
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -109,37 +110,49 @@ class Pretrainer:
 
         self.model.train()
         total_loss = 0.0
-        total_batches = 0
+        total_steps = 0
 
-        loader = self._get_loader()
-        loader_start_time = time.time()
-        for batch_idx, data in enumerate(loader):
+        loaders = self._get_all_loaders()
+        loader_iters = [iter(itertools.cycle(loader)) for loader in loaders]
+
+        # 1. max loader length
+        max_steps = max(len(loader) for loader in loaders)
+        # 2：weighted w.r.t. num_nodes
+        # total_nodes = sum([data.num_nodes for data in all_data_objects])
+        # weights = [data.num_nodes / total_nodes for data in all_data_objects]
+        # max_steps = int(sum(len(loader) for loader in loaders) / len(loaders))
+
+        for step in tqdm.tqdm(range(max_steps)):
             optimizer.zero_grad()
-            data = data.to(self.device)
-            z, frame = self.model(data)
-            loss = self.model.loss(z, frame, data, self.configs.batch_size)
+            step_loss = 0.0
 
-            loss.backward()
+            for loader_iter in loader_iters:
+                data = next(loader_iter).to(self.device)
+                z, frame = self.model(data)
+                loss_i = self.model.loss(z, frame, data, data.batch_size)
+                step_loss += loss_i
+
+            step_loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
-            total_batches += 1
+            total_loss += step_loss.item()
+            total_steps += 1
 
-            if (batch_idx + 1) % self.configs.log_interval == 0:
+            if (step + 1) % self.configs.log_interval == 0:
                 self._log_progress(
                     epoch=epoch,
-                    batch_idx=batch_idx + 1,
-                    dataset_len=len(loader),
-                    loss=loss.item(),
-                    start_loader_time=loader_start_time,
-                    batches_done=batch_idx + 1
+                    batch_idx=step + 1,
+                    dataset_len=max_steps,
+                    loss=step_loss.item(),
+                    start_loader_time=time.time(),
+                    batches_done=step + 1
                 )
 
         # Log
         self._log_epoch_summary(epoch, start_epoch_time)
         self._update_epoch_time(epoch, start_epoch_time)
 
-        return total_loss / max(1, total_batches)
+        return total_loss / max(1, total_steps)
 
     def _log_progress(self, epoch, batch_idx, dataset_len, loss, start_loader_time,
                       batches_done):
@@ -193,9 +206,12 @@ class Pretrainer:
         epoch_duration = time.time() - start_epoch_time
         self.epoch_times.append(epoch_duration)
 
-    def _get_loader(self):
-        data = load_pretrain_single_graph_data(self.configs, "Computers")
+    def _get_all_loaders(self):
+        loaders = []
+        for data_name in self.configs.pretrain_single_graph_data:
+            data = load_pretrain_single_graph_data(self.configs, data_name)
 
-        loader = NeighborLoader(data, input_nodes=None, batch_size=self.configs.batch_size, num_neighbors=self.configs.num_neighbors,
+            loader = NeighborLoader(data, input_nodes=None, batch_size=self.configs.batch_size, num_neighbors=self.configs.num_neighbors,
                             num_workers=self.configs.num_workers, persistent_workers=False)
-        return loader
+            loaders.append(loader)
+        return loaders
