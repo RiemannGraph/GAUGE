@@ -39,12 +39,12 @@ class AdaptionConfig(ModelConfig):
 def get_adaption_parser():
     parser = argparse.ArgumentParser(description="Graph Downstream Adaption Configuration")
 
-    parser.add_argument("--data_name", type=str, default="Computers",
+    parser.add_argument("--data_name", type=str, default="PubMed",
                         help="Name of the dataset. [ogbn-arxiv, Computers, Reddit, FB15k_237, PROTEINS, HIV] ")
     parser.add_argument("--task_type", type=str, default="node_cls", choices=["node_cls", "graph_cls", "link_cls"],
                         help="Type of downstream task.")
     parser.add_argument("--pretrained_checkpoint", type=str,
-                        default="checkpoints/pretrain/ogbn-arxiv_Reddit_FB15k_237/pretrain_epoch_5.pth",
+                        default="checkpoints/pretrain/Computers_Amazon-ratings/pretrain_epoch_12.pth",
                         help="file path of pretrained model checkpoint.")
     parser.add_argument("--metric", type=str, default="acc", choices=["acc", "auc"])
 
@@ -59,8 +59,8 @@ def get_adaption_parser():
                         help="Proportion of validation set.")
 
     # Training
-    parser.add_argument("--drop", type=float, default=0.2)
-    parser.add_argument("--batch_size", type=int, default=256,
+    parser.add_argument("--drop", type=float, default=0.1)
+    parser.add_argument("--batch_size", type=int, default=512,
                         help="Batch size for task training.")
     parser.add_argument("--lr_task", type=float, default=1e-3,
                         help="Learning rate for task model.")
@@ -74,7 +74,7 @@ def get_adaption_parser():
                         help="Log every N epochs.")
     parser.add_argument("--resume_checkpoint", action="store_true",
                         help="Whether to resume from checkpoint.")
-    parser.add_argument("--patience", type=int, default=20,
+    parser.add_argument("--patience", type=int, default=15,
                         help="Patience for early stopping.")
 
     # Config IO
@@ -107,7 +107,7 @@ def parse_adaption_config(remaining_argv=None) -> AdaptionConfig:
         pretrain_single_graph_data=args.pretrain_single_graph_data,
         num_workers=args.num_workers,
         n_layers=args.n_layers,
-        n_smooth_layers=args.n_smooth_layers,
+        n_flat_layers=args.n_flat_layers,
         in_dim=args.in_dim,
         hid_dim=args.hid_dim,
         fiber_dim=args.fiber_dim,
@@ -118,6 +118,7 @@ def parse_adaption_config(remaining_argv=None) -> AdaptionConfig:
         normalize=args.normalize,
         norm_str=args.norm_str,
         temperature=args.temperature,
+        gamma=args.gamma,
         loss_reduction=args.loss_reduction,
 
         data_name=args.data_name,

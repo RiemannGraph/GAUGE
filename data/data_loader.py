@@ -61,3 +61,29 @@ def load_few_shot_single_graph_data(configs, data_name, k_shot, num_splits, num_
     data = dataset[0]
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     return dataset, data, train_mask, val_mask, test_mask
+
+
+def load_link_graph_data(configs, data_name):
+    root = configs.root
+    transform = T.Compose([
+        T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
+                          add_negative_train_samples=False, disjoint_train_ratio=0, neg_sampling_ratio=1.0)
+    ])
+    if data_name == "ogbn-arxiv":
+        dataset = PygNodePropPredDataset(root=root, name=data_name, transform=T.Compose([T.ToUndirected()]))
+    elif data_name in ["Cora", "CiteSeers", "PubMed"]:
+        dataset = Planetoid(root, data_name)
+    elif data_name in ["Computers", "Photo"]:
+        dataset = Amazon(root, data_name)
+    elif data_name == 'Reddit':
+        dataset = Reddit(f"{root}/{data_name}")
+    elif data_name == "FacebookPagePage":
+        dataset = FacebookPagePage(f"{root}/{data_name}")
+    elif data_name == 'PPI':
+        dataset = AttributedGraphDataset(root, name=data_name.lower())
+    elif data_name in ["Roman-empire", "Amazon-ratings", "Questions"]:
+        dataset = HeterophilousGraphDataset(root, data_name)
+    else:
+        raise ValueError('Invalid data_name')
+    train_data, val_data, test_data = transform(dataset[0])
+    return dataset, train_data, val_data, test_data

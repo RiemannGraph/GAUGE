@@ -29,9 +29,9 @@ def get_pretrain_parser():
     parser = argparse.ArgumentParser(description="Graph Pretraining Configuration")
 
     # Training
-    parser.add_argument('--batch_size', type=int, default=512,
+    parser.add_argument('--batch_size', type=int, default=256,
                         help='Batch size for data loading')
-    parser.add_argument('--pretrain_epochs', type=int, default=10,
+    parser.add_argument('--pretrain_epochs', type=int, default=20,
                         help='Total pretrain epochs')
     parser.add_argument('--drop', type=float, default=0.1,
                        help='Dropout rate')
@@ -81,7 +81,7 @@ def parse_pretrain_config(remaining_argv=None) -> PretrainConfig:
 
         num_workers=args.num_workers,
         n_layers=args.n_layers,
-        n_smooth_layers=args.n_smooth_layers,
+        n_flat_layers=args.n_flat_layers,
         in_dim=args.in_dim,
         hid_dim=args.hid_dim,
         att_dim=args.att_dim,
@@ -92,6 +92,7 @@ def parse_pretrain_config(remaining_argv=None) -> PretrainConfig:
         normalize=args.normalize,
         norm_str=args.norm_str,
         temperature=args.temperature,
+        gamma=args.gamma,
 
         batch_size=args.batch_size,
         pretrain_epochs=args.pretrain_epochs,

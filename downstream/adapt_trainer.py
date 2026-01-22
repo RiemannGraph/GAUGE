@@ -5,31 +5,35 @@ import numpy as np
 import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch_geometric.loader import NeighborLoader
+from torch_geometric.loader import NeighborLoader, LinkNeighborLoader
 
-from cores.models import GraphTrivializeModel
+from cores.models import Characteron
 from data import (
     load_few_shot_single_graph_data,
+    load_link_graph_data
 )
-from downstream.adapter import GraphTrivialAdapter
-from downstream.tasks import train_step, eval_step
+from downstream.adapter import CharacteronAdapter
+from downstream.tasks import NodeClassificationTask, GraphClassificationTask, LinkPredictionTask
 from utils.checkpoints import (
     load_checkpoint,
     EarlyStopping
 )
 from utils.logger import create_logger
 
+TASK_REGISTRY = {
+    'node_cls': NodeClassificationTask,
+    'graph_cls': GraphClassificationTask,
+    'link_cls': LinkPredictionTask,
+}
+
 
 class AdaptTrainer:
-    TASK_CONFIGS = {
-        'node_cls': {'label_attr': 'y'},
-        'graph_cls': {'label_attr': 'y'},
-        'link_cls': {'label_attr': 'edge_label'},
-    }
+
     def __init__(self, configs, logger=None):
         self.configs = configs
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
         self.logger = logger if logger is not None else create_logger(configs.log_path)
+        self.task_handler = TASK_REGISTRY[configs.task_type](device=self.device, metric=configs.metric)
 
         self.start_epoch = 0
 
@@ -52,9 +56,9 @@ class AdaptTrainer:
             f.write(f"Pretraining Model: {self.configs.pretrained_checkpoint}\n")
         f.close()
         for trial in range(self.configs.num_trials):
-            pretrained_model = GraphTrivializeModel(self.configs)
+            pretrained_model = Characteron(self.configs)
             load_checkpoint(self.configs.pretrained_checkpoint, pretrained_model, map_location='cuda')
-            model = GraphTrivialAdapter(self.configs, num_features, pretrained_model,
+            model = CharacteronAdapter(self.configs, num_features, pretrained_model,
                                         self.configs.task_type, num_classes).to(self.device)
             optimizer = Adam(
                 model.parameters(),
@@ -73,49 +77,46 @@ class AdaptTrainer:
                 checkpoint_dir=self.configs.checkpoint_dir,
                 verbose=True
             )
-            model.train()
-            for epoch in range(self.start_epoch, self.configs.task_epochs):
-                epoch_start_time = time.time()
-                train_loss, train_metric = self._train_epoch(train_loaders[trial], model, optimizer, trial)
-                scheduler.step()
-                epoch_time = time.time() - epoch_start_time
+            if self.configs.k_shot > 0:
+                model.train()
+                for epoch in range(self.start_epoch, self.configs.task_epochs):
+                    epoch_start_time = time.time()
+                    train_loss, train_metric = self._train_epoch(train_loaders[trial], model, optimizer, trial)
+                    scheduler.step()
+                    epoch_time = time.time() - epoch_start_time
 
-                self.logger.info(
-                    f'Epoch {epoch:03d}/{self.configs.task_epochs} | '
-                    f'Train Loss: {train_loss:.6f} | '
-                    f'Train {self.configs.metric.upper()}: {train_metric * 100:.2f}% | '
-                    f'Time: {epoch_time:.2f}s | '
-                    f'LR: {optimizer.param_groups[0]["lr"]:.2e}'
-                )
+                    self.logger.info(
+                        f'Epoch {epoch:03d}/{self.configs.task_epochs} | '
+                        f'Train Loss: {train_loss:.6f} | '
+                        f'Train {self.configs.metric.upper()}: {train_metric * 100:.2f}% | '
+                        f'Time: {epoch_time:.2f}s | '
+                        f'LR: {optimizer.param_groups[0]["lr"]:.2e}'
+                    )
 
-                # Evaluation
-                if (epoch + 1) % self.configs.eval_interval == 0:
-                    val_loss, val_metric = eval_step(val_loaders[trial], model, self.configs.batch_size, self.device,
-                                           **AdaptTrainer.TASK_CONFIGS[self.task_type],
-                                                  metric=self.configs.metric)
-                    self.logger.info(f'Epoch {epoch:03d} | Val {self.configs.metric.upper()}: {val_metric * 100:.2f}%')
+                    # Evaluation
+                    if (epoch + 1) % self.configs.eval_interval == 0:
+                        val_loss, val_metric = self.task_handler.eval_step(val_loaders[trial], model)
+                        self.logger.info(f'Epoch {epoch:03d} | Val {self.configs.metric.upper()}: {val_metric * 100:.2f}%')
 
-                    if early_stopping.step(
-                            metric=val_metric,
-                            model=model,
-                            optimizer=optimizer,
-                            scheduler=scheduler,
-                            epoch=epoch,
-                            config=self.configs
-                    ):
-                        break
+                        if early_stopping.step(
+                                metric=val_metric,
+                                model=model,
+                                optimizer=optimizer,
+                                scheduler=scheduler,
+                                epoch=epoch,
+                                config=self.configs
+                        ):
+                            break
 
-            # Final save
-            final_path = os.path.join(self.configs.checkpoint_dir, f'downstream_final_{trial}.pth')
-            torch.save({'state_dict': model.state_dict()}, final_path)
-            self.logger.info(f"Trial {trial} | Training finished. Final model saved to {final_path}")
+                # Final save
+                final_path = os.path.join(self.configs.checkpoint_dir, f'downstream_final_{trial}.pth')
+                torch.save({'state_dict': model.state_dict()}, final_path)
+                self.logger.info(f"Trial {trial} | Training finished. Final model saved to {final_path}")
 
-            self.logger.info(f"===========Loading best checkpoint from {self.configs.checkpoint_dir}/model_best.pth===========")
-            load_checkpoint(f"{self.configs.checkpoint_dir}/model_best.pth", model)
+                self.logger.info(f"===========Loading best checkpoint from {self.configs.checkpoint_dir}/model_best.pth===========")
+                load_checkpoint(f"{self.configs.checkpoint_dir}/model_best.pth", model)
             model.eval()
-            test_loss, test_metric = eval_step(test_loaders[trial], model, self.configs.batch_size, self.device,
-                                            **AdaptTrainer.TASK_CONFIGS[self.task_type],
-                                            metric=self.configs.metric)
+            test_loss, test_metric = self.task_handler.eval_step(test_loaders[trial], model)
             self.logger.info("=====================================================")
             info = f'Trial {trial:02d} | Test {self.configs.metric.upper()}: {test_metric * 100:.2f}%' \
                              f'| Test Loss: {test_loss:.6f} '
@@ -136,9 +137,7 @@ class AdaptTrainer:
         f.close()
 
     def _train_epoch(self, train_loader, model, optimizer, trial):
-        loss, acc = train_step(train_loader, optimizer, model, self.configs.batch_size, self.device,
-                               **AdaptTrainer.TASK_CONFIGS[self.task_type],
-                               metric=self.configs.metric)
+        loss, acc = self.task_handler.train_step(train_loader, optimizer, model)
         return loss, acc
 
     def get_loaders(self, configs):
@@ -182,22 +181,29 @@ class AdaptTrainer:
         #                                        batch_size=configs.batch_size,
         #                                        shuffle=False))
         #
-        # elif configs.task_type == "link_cls":
-        #     data, train_sets, val_sets, test_sets = load_few_shot_link_graph_data(configs, configs.data_name,
-        #                                                          configs.k_shot, configs.num_trials,
-        #                                                          configs.num_val)
-        #     num_classes = configs.num_way_link
-        #     num_features = data.x.shape[-1]
-        #     for t in range(configs.num_trials):
-        #         train_loaders.append(LinkDataLoader(train_sets[t],
-        #                                             batch_size=configs.batch_size,
-        #                                             shuffle=True))
-        #         val_loaders.append(LinkDataLoader(val_sets[t],
-        #                                           batch_size=configs.batch_size,
-        #                                           shuffle=False))
-        #         test_loaders.append(LinkDataLoader(test_sets[t],
-        #                                            batch_size=configs.batch_size,
-        #                                            shuffle=False))
+        elif configs.task_type == "link_cls":
+            for t in range(configs.num_trials):
+                dataset, train_data, val_data, test_data = load_link_graph_data(configs, configs.data_name)
+                num_classes = None
+                num_features = dataset.num_features
+                train_loaders.append(LinkNeighborLoader(train_data,
+                                                    batch_size=configs.batch_size,
+                                                    num_neighbors=self.configs.num_neighbors,
+                                                    edge_label_index=train_data.edge_label_index,
+                                                    edge_label=train_data.edge_label,
+                                                    shuffle=True))
+                val_loaders.append(LinkNeighborLoader(val_data,
+                                                    batch_size=configs.batch_size,
+                                                    num_neighbors=self.configs.num_neighbors,
+                                                    edge_label_index=val_data.edge_label_index,
+                                                    edge_label=val_data.edge_label,
+                                                    shuffle=True))
+                test_loaders.append(LinkNeighborLoader(test_data,
+                                                    batch_size=configs.batch_size,
+                                                    num_neighbors=self.configs.num_neighbors,
+                                                    edge_label_index=test_data.edge_label_index,
+                                                    edge_label=test_data.edge_label,
+                                                    shuffle=True))
         else:
             raise NotImplementedError
         return (train_loaders, val_loaders, test_loaders), num_classes, num_features

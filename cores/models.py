@@ -1,53 +1,66 @@
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
-from cores.layers import NormModule, FeedForwardLayer, MultiHeadMPLayer, FrameSmoothModule
-from cores.loss_funcs import CentralNodeEmbedPrediction
-
+from torch_scatter import scatter_mean
+from cores.layers import MultiPathTrivialization, GatedEnergyFlatten
+from cores.loss_funcs import CharacteristicStructureLoss
 
 EPS = 1e-6
 
 
-class GraphTrivializeLayer(nn.Module):
+class CharacteronLayer(nn.Module):
     def __init__(self, configs):
         super().__init__()
-        self.multi_head_mp = MultiHeadMPLayer(configs.fiber_dim, configs.hid_dim,
-                                              configs.hid_dim, configs.bias,
-                                              configs.norm_str, configs.act_str, configs.drop)
-        self.f_smooth = FrameSmoothModule(configs.n_smooth_layers, configs.fiber_dim,
-                                          configs.hid_dim, configs.bias,
-                                          configs.norm_str, configs.act_str, configs.drop)
-        self.horizon_lin = nn.Linear(configs.fiber_dim, configs.fiber_dim, bias=False)
-        self.vertical_lin = nn.Linear(configs.hid_dim, configs.hid_dim, bias=configs.bias)
+        self.multi_path_layer = MultiPathTrivialization(configs.hid_dim, configs.fiber_dim,
+                                                        configs.hid_dim, configs.bias,
+                                                        configs.norm_str, configs.act_str,
+                                                        configs.drop, configs.temperature)
+        self.gated_energy_layers = nn.ModuleList([
+            GatedEnergyFlatten(configs.gamma)
+            for _ in range(configs.n_flat_layers)
+        ])
+        self.fc = nn.Linear(configs.hid_dim, configs.hid_dim, bias=False)
 
-    def forward(self, z, edge_index, return_frame: bool = False):
-        frame = self.multi_head_mp(z, edge_index)    # [N, d]
-        frame = self.f_smooth(frame, edge_index)    # [N, r, d]
-        x = self.horizon_lin(torch.einsum('ikj, ij->ik', frame, z)) # [N, r]
-        z = torch.einsum('ikj, ik->ij', frame, x) + self.vertical_lin(z)
-        if return_frame:
-            return z, frame
-        else:
-            return z
+    def forward(self, z, edge_index):
+        trivial = self.multi_path_layer(z, edge_index)
+        for layer in self.gated_energy_layers:
+            trivial = layer(trivial, edge_index)
+        Qtz = torch.einsum('ikj, ij -> ik', trivial, z)
+        z = torch.einsum('ikj, ik -> ij', trivial, Qtz)
+        src, dst = edge_index[0], edge_index[1]
+        z = self.fc(z)
+        z = scatter_mean(z[src], dst, dim=0, dim_size=z.shape[0])
+        return z, trivial
 
 
-class GraphTrivializeModel(nn.Module):
+class Characteron(nn.Module):
     def __init__(self, configs):
         super().__init__()
+        self.n_layers = configs.n_layers
         self.input_lin = nn.Linear(configs.in_dim, configs.hid_dim)
-        self.layers = nn.ModuleList([GraphTrivializeLayer(configs) for _ in range(configs.n_layers)])
-        self.loss_fn = CentralNodeEmbedPrediction(configs.loss_reduction)
+        self.layers = nn.ModuleList([CharacteronLayer(configs)
+                                     for _ in range(configs.n_layers)])
+        self.loss_fn = CharacteristicStructureLoss(configs.loss_reduction)
 
-    def forward(self, graph: Data):
-        z, edge_index = graph.x, graph.edge_index
+    def forward(self, graph: Data, encoder: nn.Module = None, return_target: bool = False):
+        edge_index = graph.edge_index
+        if encoder is not None:
+            z = encoder(graph)
+        else:
+            z = graph.x
         z = self.input_lin(z)
-        for layer in self.layers[:-1]:
-            z = layer(z, edge_index)
-        z, frame = self.layers[-1](z, edge_index, return_frame=True)
-        return z, frame
 
-    def loss(self, z, frame, graph, batch_size: int = None):
-        return self.loss_fn(z, frame, graph.edge_index, batch_size)
+        if return_target:
+            z0 = z.clone()
+
+        trivial = None
+        for i, layer in enumerate(self.layers):
+            z, trivial = layer(z, edge_index)
+
+        if return_target:
+            return z, trivial, z0
+        else:
+            return z, trivial
 
     def frozen(self):
         for param in self.parameters():

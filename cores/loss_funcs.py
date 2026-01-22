@@ -6,35 +6,36 @@ from torch_scatter import scatter
 EPS = 1e-6
 
 
-class CentralNodeEmbedPrediction(nn.Module):
+class CharacteristicStructureLoss(nn.Module):
     def __init__(self, reduction: str = "mean"):
-        super(CentralNodeEmbedPrediction, self).__init__()
+        super().__init__()
         assert reduction in ['mean', 'sum'], "reduction must be 'mean' or 'sum'"
         self.reduction = reduction
 
-    def forward(self, z, frame, edge_index, batch_size: int = None):
+    def forward(self, target, z, trivial, edge_index, batch_size: int = None):
         """
 
+        :param target: [N, d]
         :param z: [N, d]
-        :param frame: [N, r, d]
+        :param trivial: [N, r, d]
         :param edge_index: [E, ]
-        :param batch_size:
+        :param batch_size: PyG Data.batch_size
         :return: loss
         """
-        x = torch.einsum('ikj, ij -> ik', frame, z)  # [N, r]
-        x_norm = F.normalize(x, dim=-1, p=2)
+        Qtz = torch.einsum('ikj, ij -> ik', trivial, z)
+        z = torch.einsum('ikj, ik -> ij', trivial, Qtz)
+        z_norm = F.normalize(z, dim=-1, p=2)
+        target = F.normalize(target, dim=-1, p=2).detach()
 
         src, dst = edge_index[0], edge_index[1]
-        x_norm_neighbor = x_norm[src]
+        z_norm_neighbor = z_norm[src]
 
-        x_pred = scatter(x_norm_neighbor, dst, dim=0, dim_size=x.shape[0], reduce=self.reduction)
+        z_pred = scatter(z_norm_neighbor, dst, dim=0, dim_size=z.shape[0], reduce=self.reduction)
 
         if batch_size is not None:
-            x_norm = x_norm[: batch_size]
-            x_pred = x_pred[: batch_size]
-            frame = frame[: batch_size]
+            target = target[: batch_size]
+            z_pred = z_pred[: batch_size]
 
-        x_error = x_norm - x_pred
-        z_error = torch.einsum('ikj, ik -> ij', frame, x_error)  # [N, d]
+        loss = torch.sum((target - z_pred) ** 2, dim=-1).mean()
 
-        return (z_error ** 2).sum(-1).mean()
+        return loss
