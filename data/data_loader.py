@@ -2,7 +2,8 @@ import torch_geometric.transforms as T
 from torch_geometric.datasets import (
     Reddit, AttributedGraphDataset,
     Planetoid, Amazon, FacebookPagePage,
-    HeterophilousGraphDataset
+    HeterophilousGraphDataset, TUDataset,
+    MoleculeNet, GNNBenchmarkDataset
 )
 from ogb.nodeproppred import PygNodePropPredDataset
 from data.data_transform import FlattenLabels, UnifyFeatureDims
@@ -62,6 +63,19 @@ def load_few_shot_single_graph_data(configs, data_name, k_shot, num_splits, num_
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     return dataset, data, train_mask, val_mask, test_mask
 
+def load_few_shot_multi_graph_data(configs, data_name, k_shot, num_splits, num_val=0.5):
+    """Just for single class classification"""
+    root = configs.root
+    if data_name in ["PROTEINS", "MUTAG", "ENZYMES"]:
+        dataset = TUDataset(root, data_name)
+    elif data_name in ["PCBA", "HIV"]:
+        dataset=  MoleculeNet(root, data_name)
+    elif data_name == "CSL":
+        dataset = GNNBenchmarkDataset(root, data_name, transform=T.OneHotDegree(4))
+    else:
+        raise ValueError('Invalid data_name')
+    train_mask, val_mask, test_mask = graph_few_shot_splits(dataset, k_shot, num_val, num_splits)
+    return dataset, train_mask, val_mask, test_mask
 
 def load_link_graph_data(configs, data_name):
     root = configs.root

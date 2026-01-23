@@ -39,12 +39,12 @@ class AdaptionConfig(ModelConfig):
 def get_adaption_parser():
     parser = argparse.ArgumentParser(description="Graph Downstream Adaption Configuration")
 
-    parser.add_argument("--data_name", type=str, default="PubMed",
+    parser.add_argument("--data_name", type=str, default="CSL",
                         help="Name of the dataset. [ogbn-arxiv, Computers, Reddit, FB15k_237, PROTEINS, HIV] ")
-    parser.add_argument("--task_type", type=str, default="node_cls", choices=["node_cls", "graph_cls", "link_cls"],
+    parser.add_argument("--task_type", type=str, default="graph_cls", choices=["node_cls", "graph_cls", "link_cls"],
                         help="Type of downstream task.")
     parser.add_argument("--pretrained_checkpoint", type=str,
-                        default="checkpoints/pretrain/Computers_Amazon-ratings/pretrain_epoch_12.pth",
+                        default="checkpoints/pretrain/Computers_Amazon-ratings/pretrain_epoch_9.pth",
                         help="file path of pretrained model checkpoint.")
     parser.add_argument("--metric", type=str, default="acc", choices=["acc", "auc"])
 
@@ -62,7 +62,7 @@ def get_adaption_parser():
     parser.add_argument("--drop", type=float, default=0.1)
     parser.add_argument("--batch_size", type=int, default=512,
                         help="Batch size for task training.")
-    parser.add_argument("--lr_task", type=float, default=1e-3,
+    parser.add_argument("--lr_task", type=float, default=5e-4,
                         help="Learning rate for task model.")
     parser.add_argument("--task_weight_decay", type=float, default=0,
                         help="Weight decay for task optimizer.")

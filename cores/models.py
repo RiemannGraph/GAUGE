@@ -37,7 +37,10 @@ class Characteron(nn.Module):
     def __init__(self, configs):
         super().__init__()
         self.n_layers = configs.n_layers
-        self.input_lin = nn.Linear(configs.in_dim, configs.hid_dim)
+        self.input_lin = nn.Sequential(
+            nn.Linear(configs.in_dim, configs.hid_dim),
+            nn.LayerNorm(configs.hid_dim)
+        )
         self.layers = nn.ModuleList([CharacteronLayer(configs)
                                      for _ in range(configs.n_layers)])
         self.loss_fn = CharacteristicStructureLoss(configs.loss_reduction)

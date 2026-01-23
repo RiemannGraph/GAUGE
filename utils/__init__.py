@@ -7,6 +7,7 @@ from .checkpoints import (
     EarlyStopping)
 from .tools import format_time, set_seed
 from .logger import create_logger
+from .character import get_characteristic_structures, predict_error
 
 __all__ = ["search_triangles",
            "load_checkpoint",
@@ -16,5 +17,7 @@ __all__ = ["search_triangles",
            "EarlyStopping",
            "format_time",
            "create_logger",
-           "set_seed"
+           "set_seed",
+           "get_characteristic_structures",
+           "predict_error"
            ]
