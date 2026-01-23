@@ -13,7 +13,7 @@ from data import (
     load_few_shot_multi_graph_data,
     load_link_graph_data
 )
-from downstream.adapter import CharacteronAdapter
+from downstream.adapter import NodeAdapter, GraphAdapter, LinkAdapter
 from downstream.tasks import NodeClassificationTask, GraphClassificationTask, LinkPredictionTask
 from utils.checkpoints import (
     load_checkpoint,
@@ -25,6 +25,12 @@ TASK_REGISTRY = {
     'node_cls': NodeClassificationTask,
     'graph_cls': GraphClassificationTask,
     'link_cls': LinkPredictionTask,
+}
+
+ADAPTERS = {
+    'node_cls': NodeAdapter,
+    'graph_cls': GraphAdapter,
+    'link_cls': LinkAdapter,
 }
 
 
@@ -59,8 +65,8 @@ class AdaptTrainer:
         for trial in range(self.configs.num_trials):
             pretrained_model = Characteron(self.configs)
             load_checkpoint(self.configs.pretrained_checkpoint, pretrained_model, map_location='cuda')
-            model = CharacteronAdapter(self.configs, num_features, pretrained_model,
-                                       self.configs.task_type, num_classes).to(self.device)
+            model = ADAPTERS[self.configs.task_type](self.configs, num_features,
+                                                     pretrained_model, num_classes).to(self.device)
             optimizer = Adam(
                 model.parameters(),
                 lr=self.configs.lr_task,
