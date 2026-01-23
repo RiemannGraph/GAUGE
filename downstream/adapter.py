@@ -63,8 +63,8 @@ class GraphAdapter(Adapter):
         pe = graph.x
         x = self.input_lin(graph.x)
         graph.x = torch.cat([x, pe], dim=-1)
-        z, trivial, target = self.pretrained_model(graph, return_target=True)
-        loss = self.loss_fn(target, z, trivial, graph.edge_index, None)
+        z, trivial = self.pretrained_model(graph)
+        loss = self.loss_fn(z, z, trivial, graph.edge_index, None)
         z = global_mean_pool(z, graph.batch, size=len(graph))
         pred = self.head(z)
         return pred, loss
