@@ -4,9 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.data import Data
 from cores.models import Characteron
 from cores.loss_funcs import CharacteristicStructureLoss
-from utils import get_character_structs
-from torch_scatter import scatter_mean, scatter_std, scatter_max, scatter_min, scatter_add
-from torch_geometric.nn import SGConv, global_mean_pool, GCN
+from torch_geometric.nn import global_mean_pool
 
 
 class Adapter(nn.Module):
