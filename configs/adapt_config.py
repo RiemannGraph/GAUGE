@@ -59,10 +59,10 @@ def get_adaption_parser():
                         help="Proportion of validation set.")
 
     # Training
-    parser.add_argument("--drop", type=float, default=0.1)
+    parser.add_argument("--drop", type=float, default=0.0)
     parser.add_argument("--batch_size", type=int, default=512,
                         help="Batch size for task training.")
-    parser.add_argument("--lr_task", type=float, default=5e-4,
+    parser.add_argument("--lr_task", type=float, default=1e-3,
                         help="Learning rate for task model.")
     parser.add_argument("--task_weight_decay", type=float, default=0,
                         help="Weight decay for task optimizer.")

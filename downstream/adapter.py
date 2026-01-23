@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Data
-from torch_geometric.nn import global_mean_pool
 from cores.models import Characteron
 from cores.loss_funcs import CharacteristicStructureLoss
-from utils import predict_error
+from utils import get_character_structs
+from torch_scatter import scatter_mean, scatter_std, scatter_max, scatter_min, scatter_add
+from torch_geometric.nn import SGConv, global_mean_pool, GCN
 
 
 class Adapter(nn.Module):
@@ -52,20 +53,21 @@ class GraphAdapter(Adapter):
                  pretrained_model: Characteron,
                  num_cls: int):
         super().__init__(configs, feature_dim, pretrained_model, num_cls)
+        self.input_lin = nn.Sequential(
+            nn.Linear(feature_dim, configs.in_dim - feature_dim),
+            nn.LayerNorm(configs.in_dim - feature_dim)
+        )
         self.head = nn.Linear(configs.hid_dim, num_cls)
 
     def forward(self, graph: Data):
-        graph.x = self.input_lin(graph.x)
+        pe = graph.x
+        x = self.input_lin(graph.x)
+        graph.x = torch.cat([x, pe], dim=-1)
         z, trivial, target = self.pretrained_model(graph, return_target=True)
-
-        error = predict_error(z, trivial, graph.edge_index)
-        error_norm = (error - error.min()) / (error.max() - error.min())
-        mask = error_norm < 0.5
-        z = z[mask]
-        batch = graph.batch[mask]
-        z = global_mean_pool(z, batch, size=len(graph))
+        loss = self.loss_fn(target, z, trivial, graph.edge_index, None)
+        z = global_mean_pool(z, graph.batch, size=len(graph))
         pred = self.head(z)
-        return pred, error.mean()
+        return pred, loss
 
 
 class LinkAdapter(Adapter):

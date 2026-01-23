@@ -71,7 +71,7 @@ def load_few_shot_multi_graph_data(configs, data_name, k_shot, num_splits, num_v
     elif data_name in ["PCBA", "HIV"]:
         dataset=  MoleculeNet(root, data_name)
     elif data_name == "CSL":
-        dataset = GNNBenchmarkDataset(root, data_name, transform=T.OneHotDegree(4))
+        dataset = GNNBenchmarkDataset(root, data_name, transform=T.AddLaplacianEigenvectorPE(k=16, attr_name="x"))
     else:
         raise ValueError('Invalid data_name')
     train_mask, val_mask, test_mask = graph_few_shot_splits(dataset, k_shot, num_val, num_splits)
