@@ -35,7 +35,6 @@ ADAPTERS = {
 
 
 class AdaptTrainer:
-
     def __init__(self, configs, logger=None):
         self.configs = configs
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
