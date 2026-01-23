@@ -66,9 +66,9 @@ def load_few_shot_single_graph_data(configs, data_name, k_shot, num_splits, num_
 def load_few_shot_multi_graph_data(configs, data_name, k_shot, num_splits, num_val=0.5):
     """Just for single class classification"""
     root = configs.root
-    if data_name in ["PROTEINS", "MUTAG", "ENZYMES"]:
+    if data_name in ["PROTEINS", "MUTAG"]:
         dataset = TUDataset(root, data_name)
-    elif data_name in ["PCBA", "HIV"]:
+    elif data_name in ["HIV"]:
         dataset=  MoleculeNet(root, data_name)
     elif data_name == "CSL":
         dataset = GNNBenchmarkDataset(root, data_name, transform=T.AddLaplacianEigenvectorPE(k=16, attr_name="x"))
