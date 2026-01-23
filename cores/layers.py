@@ -73,7 +73,7 @@ class GatedEnergyFlatten(nn.Module):
         N, r, d = trivial.shape
         src, dst = edge_index[0], edge_index[1]
         tri_src, tri_dst = trivial[src], trivial[dst]
-        tr_ij = (tri_src * tri_dst).sum(-1).sum(-1) - r  # [E, ]
+        tr_ij = r - (tri_src * tri_dst).sum(-1).sum(-1)  # [E, ]
         g_ij = torch.sigmoid(-F.softplus(self.beta) * tr_ij + self.bias).unsqueeze(-1).unsqueeze(-1)
 
         tri_tmp = scatter_mean(g_ij * tri_src, index=dst, dim=0, dim_size=N) * self.gamma  # [N, r, d]
