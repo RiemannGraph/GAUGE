@@ -9,7 +9,7 @@ EPS = 1e-6
 class FeedForwardLayer(nn.Module):
     def __init__(self, in_dim, hid_dim, out_dim, bias, act_str='gelu', drop=0.3):
         super().__init__()
-        self.norm = nn.LayerNorm(in_dim)  # ← 新增
+        self.norm = nn.LayerNorm(in_dim)
         self.layer = nn.Sequential(
             nn.Linear(in_dim, hid_dim, bias=bias),
             ActivateModule(act_str),
