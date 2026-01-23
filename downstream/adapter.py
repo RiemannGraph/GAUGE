@@ -40,11 +40,11 @@ class NodeAdapter(Adapter):
 
     def forward(self, graph: Data):
         graph.x = self.input_lin(graph.x)
-        z, trivial, target = self.pretrained_model(graph, return_target=True)
+        z, trivial = self.pretrained_model(graph)
 
         pred = self.head(z)
-        # loss = self.loss_fn(target, z, trivial, graph.edge_index, graph.batch_size if hasattr(graph, "batch_size") else None)
-        return pred, 0
+        loss = self.loss_fn(z, z, trivial, graph.edge_index, graph.batch_size if hasattr(graph, "batch_size") else None)
+        return pred, loss * 0.1
 
 
 class GraphAdapter(Adapter):
@@ -63,11 +63,11 @@ class GraphAdapter(Adapter):
         pe = graph.x
         x = self.input_lin(graph.x)
         graph.x = torch.cat([x, pe], dim=-1)
-        z, trivial = self.pretrained_model(graph)
-        loss = self.loss_fn(z, z, trivial, graph.edge_index, None)
+        z, trivial, target = self.pretrained_model(graph, return_target=True)
+        loss = self.loss_fn(target, z, trivial, graph.edge_index, None)
         z = global_mean_pool(z, graph.batch, size=len(graph))
         pred = self.head(z)
-        return pred, loss
+        return pred, loss * 0.1
 
 
 class LinkAdapter(Adapter):
