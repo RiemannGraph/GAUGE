@@ -14,6 +14,15 @@ class FlattenLabels(BaseTransform):
         return data
 
 
+class ToFloat(BaseTransform):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, data):
+        data.x = data.x.float()
+        return data
+
+
 class UnifyFeatureDims(BaseTransform):
     def __init__(self, uni_dim: int, mode='random'):
         super().__init__()
@@ -42,8 +51,8 @@ class FewShotLinkSplit(BaseTransform):
 
     def forward(self, data):
         train_mask, val_mask, test_mask, selected_relations_list = link_k_shot_split(data,
-                                                            self.k_shot, self.num_splits,
-                                                            self.num_val)
+                                                                                     self.k_shot, self.num_splits,
+                                                                                     self.num_val)
         data.train_mask = train_mask
         data.val_mask = val_mask
         data.test_mask = test_mask

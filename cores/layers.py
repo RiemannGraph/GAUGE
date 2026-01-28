@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import scatter_mean, scatter_sum
+from torch_scatter import scatter_mean, scatter_sum, scatter_softmax
 
 EPS = 1e-6
 
@@ -59,11 +59,10 @@ class MultiPathTrivialization(nn.Module):
 
 
 class GatedEnergyFlatten(nn.Module):
-    def __init__(self, gamma=0.01):
+    def __init__(self, gamma=0.01, temperature=1.0):
         super().__init__()
+        self.temperature = temperature
         self.gamma = gamma
-        self.beta = nn.Parameter(torch.tensor([0.0]))
-        self.bias = nn.Parameter(torch.tensor([1.0]))
 
     def forward(self, trivial, edge_index):
         """
@@ -74,9 +73,10 @@ class GatedEnergyFlatten(nn.Module):
         src, dst = edge_index[0], edge_index[1]
         tri_src, tri_dst = trivial[src], trivial[dst]
         tr_ij = r - (tri_src * tri_dst).sum(-1).sum(-1)  # [E, ]
-        g_ij = torch.sigmoid(-F.softplus(self.beta) * tr_ij + self.bias).unsqueeze(-1).unsqueeze(-1)
+        g_ij = scatter_softmax(-tr_ij / self.temperature, index=dst, dim=0, dim_size=tr_ij.shape[0]).unsqueeze(
+            -1).unsqueeze(-1)
 
-        tri_tmp = scatter_mean(g_ij * tri_src, index=dst, dim=0, dim_size=N) * self.gamma  # [N, r, d]
+        tri_tmp = scatter_sum(g_ij * tri_src, index=dst, dim=0, dim_size=N) * self.gamma  # [N, r, d]
 
         trivial = (1 - self.gamma) * trivial + tri_tmp
 

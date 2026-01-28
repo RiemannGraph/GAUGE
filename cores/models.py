@@ -3,12 +3,11 @@ import torch.nn as nn
 from torch_geometric.data import Data
 from torch_scatter import scatter_mean
 from cores.layers import MultiPathTrivialization, GatedEnergyFlatten
-from cores.loss_funcs import CharacteristicStructureLoss
 
 EPS = 1e-6
 
 
-class CharacteronLayer(nn.Module):
+class InnerateLayer(nn.Module):
     def __init__(self, configs):
         super().__init__()
         self.multi_path_layer = MultiPathTrivialization(configs.hid_dim, configs.fiber_dim,
@@ -16,7 +15,7 @@ class CharacteronLayer(nn.Module):
                                                         configs.norm_str, configs.act_str,
                                                         configs.drop, configs.temperature)
         self.gated_energy_layers = nn.ModuleList([
-            GatedEnergyFlatten(configs.gamma)
+            GatedEnergyFlatten(configs.gamma, configs.temperature)
             for _ in range(configs.n_flat_layers)
         ])
         self.fc = nn.Linear(configs.hid_dim, configs.hid_dim, bias=False)
@@ -33,7 +32,7 @@ class CharacteronLayer(nn.Module):
         return z, trivial
 
 
-class Characteron(nn.Module):
+class Innerate(nn.Module):
     def __init__(self, configs):
         super().__init__()
         self.n_layers = configs.n_layers
@@ -41,9 +40,8 @@ class Characteron(nn.Module):
             nn.Linear(configs.in_dim, configs.hid_dim),
             nn.LayerNorm(configs.hid_dim)
         )
-        self.layers = nn.ModuleList([CharacteronLayer(configs)
+        self.layers = nn.ModuleList([InnerateLayer(configs)
                                      for _ in range(configs.n_layers)])
-        self.loss_fn = CharacteristicStructureLoss(configs.loss_reduction)
 
     def forward(self, graph: Data, encoder: nn.Module = None, return_target: bool = False):
         edge_index = graph.edge_index

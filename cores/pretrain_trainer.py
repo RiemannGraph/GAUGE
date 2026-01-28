@@ -1,8 +1,8 @@
 import torch
-from torch_geometric.loader import NeighborLoader
-from cores.models import Characteron
-from cores.loss_funcs import CharacteristicStructureLoss
-from data import load_pretrain_single_graph_data
+from torch_geometric.loader import NeighborLoader, DataLoader
+from cores.models import Innerate
+from cores.loss_funcs import DirichletLoss
+from data import load_pretrain_graph_data
 from utils import (
     save_checkpoint,
     load_checkpoint,
@@ -25,15 +25,15 @@ class Pretrainer:
     def __init__(self, configs, logger=None):
         self.final_model_path = None
         self.configs = configs
-        self.pretrain_single_graph_data = configs.pretrain_single_graph_data
+        self.pretrain_graph_data = configs.pretrain_graph_data
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-        self.model = Characteron(configs).to(self.device)
+        self.model = Innerate(configs).to(self.device)
 
         # dist.init_process_group(backend='nccl')
         # local_rank = int(os.environ['LOCAL_RANK'])
         # torch.cuda.set_device(local_rank)
-        # model = GraphTrivializeModel(configs).to(local_rank)
+        # model = Innerate(configs).to(local_rank)
         # self.model = DDP(model, device_ids=[local_rank])
         # torch.cuda.set_device(local_rank)
         # self.device = torch.device(f'cuda:{local_rank}')
@@ -125,17 +125,9 @@ class Pretrainer:
         total_loss = 0.0
         total_steps = 0
 
-        # 获取所有 loader，并包装为无限循环迭代器
         loaders = self._get_all_loaders()
         loader_iters = [iter(itertools.cycle(loader)) for loader in loaders]
-
-        # 选择一个合理的总步数（不再依赖最短 loader）
-        # 方案1：按最大 loader 长度
         max_steps = max(len(loader) for loader in loaders)
-        # 方案2：按总节点数加权（更公平）
-        # total_nodes = sum([data.num_nodes for data in all_data_objects])
-        # weights = [data.num_nodes / total_nodes for data in all_data_objects]
-        # max_steps = int(sum(len(loader) for loader in loaders) / len(loaders))  # 或自定义
 
         for step in tqdm.tqdm(range(max_steps)):
             optimizer.zero_grad()
@@ -170,8 +162,12 @@ class Pretrainer:
 
     def _compute_loss(self, data):
         z, trivial, z0 = self.model(data, return_target=True)
-        loss = CharacteristicStructureLoss(self.configs.loss_reduction)(z0, z, trivial, data.edge_index,
-                                                                        data.batch_size)
+        if hasattr(data, "batch_size"):
+            batch_size = data.batch_size
+        else:
+            batch_size = None
+        loss = DirichletLoss(self.configs.loss_reduction, self.configs.temperature)(z0, z, trivial, data.edge_index,
+                                                                                    batch_size)
         return loss
 
     def _log_progress(self, epoch, batch_idx, dataset_len, loss, start_loader_time,
@@ -228,11 +224,13 @@ class Pretrainer:
 
     def _get_all_loaders(self):
         loaders = []
-        for data_name in self.configs.pretrain_single_graph_data:
-            data = load_pretrain_single_graph_data(self.configs, data_name)
-
-            loader = NeighborLoader(data, input_nodes=None, batch_size=self.configs.batch_size,
-                                    num_neighbors=self.configs.num_neighbors,
-                                    num_workers=self.configs.num_workers, persistent_workers=False)
+        for data_name in self.configs.pretrain_graph_data:
+            dataset = load_pretrain_graph_data(self.configs, data_name)
+            if len(dataset) > 1:
+                loader = DataLoader(dataset, batch_size=self.configs.batch_size, shuffle=True)
+            else:
+                loader = NeighborLoader(dataset[0], input_nodes=None, batch_size=self.configs.batch_size,
+                                        num_neighbors=self.configs.num_neighbors,
+                                        num_workers=self.configs.num_workers, persistent_workers=False)
             loaders.append(loader)
         return loaders

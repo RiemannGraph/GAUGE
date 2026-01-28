@@ -7,11 +7,12 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch_geometric.loader import NeighborLoader, LinkNeighborLoader, DataLoader
 
-from cores.models import Characteron
+from cores.models import Innerate
 from data import (
-    load_few_shot_single_graph_data,
-    load_few_shot_multi_graph_data,
-    load_link_graph_data
+    load_single_graph_data,
+    load_multi_graph_data,
+    load_link_graph_data,
+    load_ZINC
 )
 from downstream.adapter import NodeAdapter, GraphAdapter, LinkAdapter
 from downstream.tasks import NodeClassificationTask, GraphClassificationTask, LinkPredictionTask
@@ -37,7 +38,7 @@ ADAPTERS = {
 class AdaptTrainer:
     def __init__(self, configs, logger=None):
         self.configs = configs
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
         self.logger = logger if logger is not None else create_logger(configs.log_path)
         self.task_handler = TASK_REGISTRY[configs.task_type](device=self.device, metric=configs.metric)
 
@@ -62,7 +63,7 @@ class AdaptTrainer:
             f.write(f"Pretraining Model: {self.configs.pretrained_checkpoint}\n")
         f.close()
         for trial in range(self.configs.num_trials):
-            pretrained_model = Characteron(self.configs)
+            pretrained_model = Innerate(self.configs)
             load_checkpoint(self.configs.pretrained_checkpoint, pretrained_model, map_location='cuda')
             model = ADAPTERS[self.configs.task_type](self.configs, num_features,
                                                      pretrained_model, num_classes).to(self.device)
@@ -83,18 +84,21 @@ class AdaptTrainer:
                 checkpoint_dir=self.configs.checkpoint_dir,
                 verbose=True
             )
-            if self.configs.k_shot > 0:
+            if self.configs.k_shot is None or self.configs.k_shot > 0:
                 model.train()
                 for epoch in range(self.start_epoch, self.configs.task_epochs):
                     epoch_start_time = time.time()
                     train_loss, train_metric = self._train_epoch(train_loaders[trial], model, optimizer, trial)
                     scheduler.step()
                     epoch_time = time.time() - epoch_start_time
-
+                    if self.configs.metric in ["acc", "auc", "ap"]:
+                        metric_str = f'Train {self.configs.metric.upper()}: {train_metric * 100:.2f}% | '
+                    else:
+                        metric_str = f'Train {self.configs.metric.upper()}: {train_metric:.5f} | '
                     self.logger.info(
                         f'Epoch {epoch:03d}/{self.configs.task_epochs} | '
-                        f'Train Loss: {train_loss:.6f} | '
-                        f'Train {self.configs.metric.upper()}: {train_metric * 100:.2f}% | '
+                        f'Train Loss: {train_loss:.6f} | ' +
+                        metric_str +
                         f'Time: {epoch_time:.2f}s | '
                         f'LR: {optimizer.param_groups[0]["lr"]:.2e}'
                     )
@@ -102,8 +106,12 @@ class AdaptTrainer:
                     # Evaluation
                     if (epoch + 1) % self.configs.eval_interval == 0:
                         val_loss, val_metric = self.task_handler.eval_step(val_loaders[trial], model)
+                        if self.configs.metric in ["acc", "auc", "ap"]:
+                            metric_str = f'Val {self.configs.metric.upper()}: {val_metric * 100:.2f}% | '
+                        else:
+                            metric_str = f'Val {self.configs.metric.upper()}: {val_metric:.5f} | '
                         self.logger.info(
-                            f'Epoch {epoch:03d} | Val {self.configs.metric.upper()}: {val_metric * 100:.2f}%')
+                            f'Epoch {epoch:03d} | ' + metric_str)
 
                         if early_stopping.step(
                                 metric=val_metric,
@@ -126,7 +134,11 @@ class AdaptTrainer:
             model.eval()
             test_loss, test_metric = self.task_handler.eval_step(test_loaders[trial], model)
             self.logger.info("=====================================================")
-            info = f'Trial {trial:02d} | Test {self.configs.metric.upper()}: {test_metric * 100:.2f}%' \
+            if self.configs.metric in ["acc", "auc", "ap"]:
+                metric_str = f'Test {self.configs.metric.upper()}: {test_metric * 100:.2f}% | '
+            else:
+                metric_str = f'Test {self.configs.metric.upper()}: {test_metric:.5f} | '
+            info = f'Trial {trial:02d} | ' + metric_str + \
                    f'| Test Loss: {test_loss:.6f} '
             self.logger.info(info)
             self.logger.info("=====================================================")
@@ -135,8 +147,13 @@ class AdaptTrainer:
             with open(f"./results/{self.configs.data_name}.txt", "a") as f:
                 f.write(info + "\n")
             f.close()
+
+        if self.configs.metric in ["acc", "auc", "ap"]:
+            metric_str = f'{np.mean(total_metric) * 100:.2f} \u00B1 {np.std(total_metric) * 100:.2f} % \n'
+        else:
+            metric_str = f'{np.mean(total_metric) * 100:.2f} \u00B1 {np.std(total_metric):.5f} \n'
         info = f'Final Test {self.configs.metric.upper()}: ' \
-               f'{np.mean(total_metric) * 100:.2f} \u00B1 {np.std(total_metric) * 100:.2f} % \n' \
+               + metric_str + \
                f'Final Test Loss: {np.mean(total_test_loss):.6f} \u00B1 {np.std(total_test_loss):.6f} \n'
         self.logger.info(info)
         with open(f"./results/{self.configs.data_name}.txt", "a") as f:
@@ -153,10 +170,11 @@ class AdaptTrainer:
         val_loaders = []
         test_loaders = []
         if configs.task_type == "node_cls":
-            dataset, data, train_mask, val_mask, test_mask = load_few_shot_single_graph_data(configs, configs.data_name,
-                                                                                             configs.k_shot,
-                                                                                             configs.num_trials,
-                                                                                             configs.num_val)
+            dataset, data, train_mask, val_mask, test_mask = load_single_graph_data(configs, configs.data_name,
+                                                                                    configs.k_shot,
+                                                                                    configs.num_trials,
+                                                                                    configs.num_val,
+                                                                                    configs.num_test)
             num_classes = dataset.num_classes
             num_features = dataset.num_features
             for t in range(configs.num_trials):
@@ -173,22 +191,41 @@ class AdaptTrainer:
                                                    shuffle=False, num_neighbors=configs.num_neighbors
                                                    ))
         elif configs.task_type == "graph_cls":
-            dataset, train_mask, val_mask, test_mask = load_few_shot_multi_graph_data(configs, configs.data_name,
-                                                                                      configs.k_shot,
-                                                                                      configs.num_trials,
-                                                                                      configs.num_val)
-            num_classes = dataset.num_classes
-            num_features = dataset.num_features
-            for t in range(configs.num_trials):
-                train_loaders.append(DataLoader(dataset[train_mask[:, t]],
-                                                batch_size=configs.batch_size,
-                                                shuffle=True))
-                val_loaders.append(DataLoader(dataset[val_mask[:, t]],
-                                              batch_size=configs.batch_size,
-                                              shuffle=False))
-                test_loaders.append(DataLoader(dataset[test_mask[:, t]],
-                                               batch_size=configs.batch_size,
-                                               shuffle=False))
+            if configs.data_name in ["ZINC12K", "ZINC250K"]:
+                train_set = load_ZINC(configs, split="train")
+                val_set = load_ZINC(configs, split="val")
+                test_set = load_ZINC(configs, split="test")
+                for t in range(configs.num_trials):
+                    train_loaders.append(DataLoader(train_set,
+                                                    batch_size=configs.batch_size,
+                                                    shuffle=True))
+                    val_loaders.append(DataLoader(val_set,
+                                                  batch_size=configs.batch_size,
+                                                  shuffle=False))
+                    test_loaders.append(DataLoader(test_set,
+                                                   batch_size=configs.batch_size,
+                                                   shuffle=False))
+                num_classes = 1
+                num_features = 1
+            else:
+                dataset, train_mask, val_mask, test_mask = load_multi_graph_data(configs, configs.data_name,
+                                                                                 configs.k_shot,
+                                                                                 configs.num_trials,
+                                                                                 configs.num_val,
+                                                                                 configs.num_test)
+                for t in range(configs.num_trials):
+                    train_loaders.append(DataLoader(dataset[train_mask[:, t]],
+                                                    batch_size=configs.batch_size,
+                                                    shuffle=True))
+                    val_loaders.append(DataLoader(dataset[val_mask[:, t]],
+                                                  batch_size=configs.batch_size,
+                                                  shuffle=False))
+                    test_loaders.append(DataLoader(dataset[test_mask[:, t]],
+                                                   batch_size=configs.batch_size,
+                                                   shuffle=False))
+                num_classes = dataset.num_classes
+                num_features = dataset.num_features
+
 
         elif configs.task_type == "link_cls":
             for t in range(configs.num_trials):

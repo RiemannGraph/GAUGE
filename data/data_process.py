@@ -111,6 +111,38 @@ def graph_few_shot_splits(dataset, k_shot, num_val, num_splits):
     return train_mask, val_mask, test_mask
 
 
+def random_graph_splits(dataset, num_val, num_test):
+    ratios = [1 - num_val - num_test, num_val, num_test]
+    total = len(dataset)
+
+    sizes = [int(ratio * total) for ratio in ratios]
+    remainder = total - sum(sizes)
+    sizes[0] += remainder
+    train_masks, val_masks, test_masks = [], [], []
+    for _ in range(5):
+        indices = torch.randperm(total)
+
+        train_indices = indices[:sizes[0]]
+        val_indices = indices[sizes[0]: sizes[0] + sizes[1]]
+        test_indices = indices[sizes[0] + sizes[1]:]
+
+        train_mask = torch.zeros(total, dtype=torch.bool)
+        val_mask = torch.zeros(total, dtype=torch.bool)
+        test_mask = torch.zeros(total, dtype=torch.bool)
+
+        train_mask[train_indices] = True
+        val_mask[val_indices] = True
+        test_mask[test_indices] = True
+        train_masks.append(train_mask)
+        val_masks.append(val_mask)
+        test_masks.append(test_mask)
+    train_mask = torch.stack(train_masks, dim=-1)
+    val_mask = torch.stack(val_masks, dim=-1)
+    test_mask = torch.stack(test_masks, dim=-1)
+
+    return train_mask, val_mask, test_mask
+
+
 def link_k_shot_split(data, k_shot, num_splits, num_val=0.1, num_way=10):
     """
 
@@ -123,7 +155,7 @@ def link_k_shot_split(data, k_shot, num_splits, num_val=0.1, num_way=10):
     """
 
     edge_index = data.edge_index  # [2, num_edges]
-    edge_type = data.edge_type    # [num_edges,]
+    edge_type = data.edge_type  # [num_edges,]
     num_edges = edge_index.size(1)
     num_relations = int(edge_type.max().item() + 1)
 

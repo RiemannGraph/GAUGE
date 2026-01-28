@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from abc import ABC, abstractmethod
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score, mean_squared_error, mean_absolute_error
 
 
 class BaseTask(ABC):
@@ -100,7 +100,12 @@ class GraphClassificationTask(BaseTask):
         return 'y'
 
     def compute_loss(self, pred, label):
-        return F.cross_entropy(pred, label)
+        if self.metric in ["acc", "auc"]:
+            return F.cross_entropy(pred, label)
+        elif self.metric in ["mae", "mse"]:
+            return F.mse_loss(pred, label)
+        else:
+            raise ValueError(f"Unsupported metric for classification: {self.metric}")
 
     def get_prediction(self, pred):
         return pred.argmax(dim=-1)
@@ -110,6 +115,10 @@ class GraphClassificationTask(BaseTask):
             return (preds == trues).mean()
         elif self.metric == "auc":
             return roc_auc_score(trues, preds)
+        elif self.metric == "mse":
+            return mean_squared_error(trues, preds)
+        elif self.metric == "mae":
+            return mean_absolute_error(trues, preds)
         else:
             raise ValueError(f"Unsupported metric for classification: {self.metric}")
 
@@ -138,5 +147,7 @@ class LinkPredictionTask(BaseTask):
         trues = trues.astype(int)
         if self.metric == "auc":
             return roc_auc_score(trues, preds)
+        elif self.metric == "ap":
+            return average_precision_score(trues, preds)
         else:
             raise ValueError(f"Unsupported metric for link prediction: {self.metric}")

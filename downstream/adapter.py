@@ -2,15 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Data
-from cores.models import Characteron
-from cores.loss_funcs import CharacteristicStructureLoss
+from cores.models import Innerate
+from cores.loss_funcs import DirichletLoss
 from torch_geometric.nn import global_mean_pool
 
 
 class Adapter(nn.Module):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Characteron,
+                 pretrained_model: Innerate,
                  num_cls: int):
         """
 
@@ -26,12 +26,12 @@ class Adapter(nn.Module):
             nn.LayerNorm(configs.in_dim)
         )
         self.pretrained_model = pretrained_model
-        self.loss_fn = CharacteristicStructureLoss(configs.loss_reduction)
+        self.loss_fn = DirichletLoss(configs.loss_reduction)
 
 class NodeAdapter(Adapter):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Characteron,
+                 pretrained_model: Innerate,
                  num_cls: int):
         super().__init__(configs, feature_dim, pretrained_model, num_cls)
         self.head = nn.Linear(configs.hid_dim, num_cls)
@@ -47,7 +47,7 @@ class NodeAdapter(Adapter):
 class GraphAdapter(Adapter):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Characteron,
+                 pretrained_model: Innerate,
                  num_cls: int):
         super().__init__(configs, feature_dim, pretrained_model, num_cls)
         self.input_lin = nn.Sequential(
@@ -70,7 +70,7 @@ class GraphAdapter(Adapter):
 class LinkAdapter(Adapter):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Characteron,
+                 pretrained_model: Innerate,
                  num_cls: int):
         super().__init__(configs, feature_dim, pretrained_model, num_cls)
         self.beta = nn.Parameter(torch.tensor([0.0]))
@@ -79,11 +79,9 @@ class LinkAdapter(Adapter):
     def forward(self, graph: Data):
         graph.x = self.input_lin(graph.x)
         z, trivial, target = self.pretrained_model(graph, return_target=True)
-        loss = self.loss_fn(z, z, trivial, graph.edge_index, graph.batch_size if hasattr(graph, "batch_size") else None)
+        loss = self.loss_fn(target, z, trivial, graph.edge_index, graph.batch_size if hasattr(graph, "batch_size") else None)
         z = F.normalize(z, p=2, dim=-1)
         edge_label_index = graph.edge_label_index
         src, dst = edge_label_index[0], edge_label_index[1]
-        eye = torch.eye(trivial.shape[1]).unsqueeze(0).to(z.device)
-        tr_ij = trivial[src] @ trivial[dst].transpose(-1, -2) - eye  # [E, ]
-        pred = torch.frobenius_norm(tr_ij, dim=(-1, -2))
+        pred = (z[src] * z[dst]).sum(-1)
         return pred, loss

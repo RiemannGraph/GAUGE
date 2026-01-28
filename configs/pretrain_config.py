@@ -77,7 +77,7 @@ def parse_pretrain_config(remaining_argv=None) -> PretrainConfig:
     config = PretrainConfig(
         num_neighbors=args.num_neighbors,
         root=args.root,
-        pretrain_single_graph_data=args.pretrain_single_graph_data,
+        pretrain_graph_data=args.pretrain_graph_data,
 
         num_workers=args.num_workers,
         n_layers=args.n_layers,
@@ -109,7 +109,7 @@ def parse_pretrain_config(remaining_argv=None) -> PretrainConfig:
     # Path
     config.log_path = "logs/pretrain/pretrain.log"
     dir_name = ""
-    for d in config.pretrain_single_graph_data:
+    for d in config.pretrain_graph_data:
         dir_name += f"{d}_"
 
     config.checkpoint_dir = f"checkpoints/pretrain/{dir_name[:-1]}"

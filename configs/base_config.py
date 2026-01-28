@@ -8,7 +8,7 @@ import os
 @dataclass
 class ModelConfig:
     """Shared pretraining datasets"""
-    pretrain_single_graph_data: List[str] = None
+    pretrain_graph_data: List[str] = None
     root: str = "./datasets"
     num_neighbors: Optional[List[int]] = None
 
@@ -39,8 +39,8 @@ def add_model_config(parser: ArgumentParser):
     """Add shared model architecture arguments"""
     group = parser.add_argument_group("Model Architecture")
     parser.add_argument("--root", type=str, default="./datasets", help="Root directory for datasets.")
-    group.add_argument('--pretrain_single_graph_data', type=str, nargs='+',
-                       default=["Computers", "Amazon-ratings"],
+    group.add_argument('--pretrain_graph_data', type=str, nargs='+',
+                       default=["HIV", "PROTEINS"],
                        help='node-level pretraining datasets')
     parser.add_argument('--num_neighbors', type=int, nargs="+", default=[20, 10],
                         help='maximum number of nodes per graph')

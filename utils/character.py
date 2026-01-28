@@ -17,21 +17,20 @@ def predict_error(z, trivial, edge_index, batch_size: int = None, reduction: str
     :param reduction:
     :return: loss
     """
-    Qtz = torch.einsum('ikj, ij -> ik', trivial, z)
-    z = torch.einsum('ikj, ik -> ij', trivial, Qtz)
-    z_norm = F.normalize(z, dim=-1, p=2)
-    target = z_norm.clone()
+    x_pred = torch.einsum('ikj, ij -> ik', trivial, z)
+    x_target = torch.einsum('ikj, ij -> ik', trivial, z.detach())
+    x_pred = F.normalize(x_pred, dim=-1, p=2)
+    x_target = F.normalize(x_target, dim=-1, p=2)
 
     src, dst = edge_index[0], edge_index[1]
-    z_norm_neighbor = z_norm[src]
 
-    z_pred = scatter(z_norm_neighbor, dst, dim=0, dim_size=z.shape[0], reduce=reduction)
+    x_pred = scatter(x_pred[src], dst, dim=0, dim_size=z.shape[0], reduce=reduction)  # [N, ]
 
     if batch_size is not None:
-        target = target[: batch_size]
-        z_pred = z_pred[: batch_size]
+        x_pred = x_pred[: batch_size]
+        x_target = x_target[: batch_size]
 
-    loss = torch.sum((target - z_pred) ** 2, dim=-1)
+    loss = torch.sum((x_target - x_pred) ** 2, dim=-1)
     return loss
 
 
