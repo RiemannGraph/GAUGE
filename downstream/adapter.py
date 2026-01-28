@@ -26,6 +26,7 @@ class Adapter(nn.Module):
             nn.LayerNorm(configs.in_dim)
         )
         self.pretrained_model = pretrained_model
+        self.pretrained_model.frozen()
         self.loss_fn = DirichletLoss(configs.loss_reduction)
 
 class NodeAdapter(Adapter):

@@ -51,11 +51,12 @@ def load_single_graph_data(configs, data_name, k_shot, num_splits, num_val=0.1, 
         random_split = T.RandomNodeSplit(split='train_rest', num_splits=num_splits,
                                          num_val=num_val, num_test=num_test)
     transform = T.Compose([
+        T.ToUndirected(),
         FlattenLabels(),
         random_split
     ])
     if data_name == "ogbn-arxiv":
-        dataset = PygNodePropPredDataset(root=root, name=data_name, transform=T.Compose([T.ToUndirected(), transform]))
+        dataset = PygNodePropPredDataset(root=root, name=data_name, transform=transform)
     elif data_name in ["Cora", "CiteSeers", "PubMed"]:
         dataset = Planetoid(root, data_name, transform=transform)
     elif data_name in ["Computers", "Photo"]:
@@ -132,5 +133,5 @@ def load_ZINC(configs, split="train"):
         subset = False
     else:
         raise ValueError('Invalid data_name')
-    dataset = ZINC(root, subset=subset, split=split, transform=ToFloat())
+    dataset = ZINC(root, subset=subset, split=split, transform=T.Compose([ToFloat(), T.ToUndirected()]))
     return dataset
