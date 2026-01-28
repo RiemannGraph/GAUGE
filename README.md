@@ -37,9 +37,21 @@ Figure 1. An Illustration of INNERATE Framework.
 </div>
 
 ## Visualization
-<div align="center">
-<img src="./pics/manifold.png" width=100%>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <img src="pics/tree.png" alt="" style="width: 100%; margin-right: 1%;">
+</div>
+<br>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <img src="pics/grid.png" alt="" style="width: 100%; margin-right: 1%;">
+</div>
+<br>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <img src="pics/path.png" alt="" style="width: 100%; margin-right: 1%;">
+</div>
+<br>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <img src="pics/star.png" alt="" style="width: 100%; margin-right: 1%;">
 </div>
 <div align=center>
-Figure 2. Visualization.
+Figure 2. Visualization on tree, grid, path and star graphs.
 </div>
