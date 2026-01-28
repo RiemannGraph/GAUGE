@@ -40,17 +40,17 @@ class AdaptionConfig(ModelConfig):
 def get_adaption_parser():
     parser = argparse.ArgumentParser(description="Graph Downstream Adaption Configuration")
 
-    parser.add_argument("--data_name", type=str, default="ZINC12K",
+    parser.add_argument("--data_name", type=str, default="FacebookPagePage",
                         help="Name of the dataset. [ogbn-arxiv, Computers, Reddit, FB15k_237, PROTEINS, HIV] ")
-    parser.add_argument("--task_type", type=str, default="graph_cls", choices=["node_cls", "graph_cls", "link_cls"],
+    parser.add_argument("--task_type", type=str, default="node_cls", choices=["node_cls", "graph_cls", "link_cls"],
                         help="Type of downstream task.")
     parser.add_argument("--pretrained_checkpoint", type=str,
-                        default="checkpoints/pretrain/Computers_Amazon-ratings/pretrain_epoch_20.pth",
+                        default="checkpoints/pretrain/ogbn-arxiv_Reddit_Questions_Computers_Amazon-ratings/pretrain_epoch_20.pth",
                         help="file path of pretrained model checkpoint.")
-    parser.add_argument("--metric", type=str, default="mae", choices=["acc", "auc", "ap", "mse", "mae"])
+    parser.add_argument("--metric", type=str, default="acc", choices=["acc", "auc", "ap", "mse", "mae"])
 
     # Task
-    parser.add_argument("--k_shot", type=int, default=None,
+    parser.add_argument("--k_shot", type=int, default=5,
                         help="Number of shots in few-shot learning.")
     parser.add_argument("--num_way_link", type=int, default=10,
                         help="Number of ways in link classification few-shot learning.")
