@@ -7,7 +7,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch_geometric.loader import NeighborLoader, LinkNeighborLoader, DataLoader
 
-from cores.models import Innerate
+from cores.models import Gauge
 from data import (
     load_single_graph_data,
     load_multi_graph_data,
@@ -63,7 +63,7 @@ class AdaptTrainer:
             f.write(f"Pretraining Model: {self.configs.pretrained_checkpoint}\n")
         f.close()
         for trial in range(self.configs.num_trials):
-            pretrained_model = Innerate(self.configs)
+            pretrained_model = Gauge(self.configs)
             load_checkpoint(self.configs.pretrained_checkpoint, pretrained_model, map_location='cuda')
             model = ADAPTERS[self.configs.task_type](self.configs, num_features,
                                                      pretrained_model, num_classes).to(self.device)

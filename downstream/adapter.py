@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Data
-from cores.models import Innerate
+from cores.models import Gauge
 from cores.loss_funcs import DirichletLoss
 from torch_geometric.nn import global_mean_pool
 
@@ -10,7 +10,7 @@ from torch_geometric.nn import global_mean_pool
 class Adapter(nn.Module):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Innerate,
+                 pretrained_model: Gauge,
                  num_cls: int):
         """
 
@@ -32,7 +32,7 @@ class Adapter(nn.Module):
 class NodeAdapter(Adapter):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Innerate,
+                 pretrained_model: Gauge,
                  num_cls: int):
         super().__init__(configs, feature_dim, pretrained_model, num_cls)
         self.head = nn.Linear(configs.hid_dim, num_cls)
@@ -48,7 +48,7 @@ class NodeAdapter(Adapter):
 class GraphAdapter(Adapter):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Innerate,
+                 pretrained_model: Gauge,
                  num_cls: int):
         super().__init__(configs, feature_dim, pretrained_model, num_cls)
         self.input_lin = nn.Sequential(
@@ -71,7 +71,7 @@ class GraphAdapter(Adapter):
 class LinkAdapter(Adapter):
     def __init__(self, configs,
                  feature_dim,
-                 pretrained_model: Innerate,
+                 pretrained_model: Gauge,
                  num_cls: int):
         super().__init__(configs, feature_dim, pretrained_model, num_cls)
         self.beta = nn.Parameter(torch.tensor([0.0]))

@@ -1,6 +1,6 @@
 import torch
 from torch_geometric.loader import NeighborLoader, DataLoader
-from cores.models import Innerate
+from cores.models import Gauge
 from cores.loss_funcs import DirichletLoss
 from data import load_pretrain_graph_data
 from utils import (
@@ -28,7 +28,7 @@ class Pretrainer:
         self.pretrain_graph_data = configs.pretrain_graph_data
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-        self.model = Innerate(configs).to(self.device)
+        self.model = Gauge(configs).to(self.device)
 
         # dist.init_process_group(backend='nccl')
         # local_rank = int(os.environ['LOCAL_RANK'])

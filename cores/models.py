@@ -7,7 +7,7 @@ from cores.layers import MultiPathTrivialization, GatedEnergyFlatten
 EPS = 1e-6
 
 
-class InnerateLayer(nn.Module):
+class GaugeLayer(nn.Module):
     def __init__(self, configs):
         super().__init__()
         self.multi_path_layer = MultiPathTrivialization(configs.hid_dim, configs.fiber_dim,
@@ -32,7 +32,7 @@ class InnerateLayer(nn.Module):
         return z, trivial
 
 
-class Innerate(nn.Module):
+class Gauge(nn.Module):
     def __init__(self, configs):
         super().__init__()
         self.n_layers = configs.n_layers
@@ -40,7 +40,7 @@ class Innerate(nn.Module):
             nn.Linear(configs.in_dim, configs.hid_dim),
             nn.LayerNorm(configs.hid_dim)
         )
-        self.layers = nn.ModuleList([InnerateLayer(configs)
+        self.layers = nn.ModuleList([GaugeLayer(configs)
                                      for _ in range(configs.n_layers)])
 
     def forward(self, graph: Data, encoder: nn.Module = None, return_target: bool = False):
