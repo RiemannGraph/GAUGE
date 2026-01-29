@@ -51,14 +51,13 @@ def load_single_graph_data(configs, data_name, k_shot, num_splits, num_val=0.1, 
         random_split = T.RandomNodeSplit(split='train_rest', num_splits=num_splits,
                                          num_val=num_val, num_test=num_test)
     transform = T.Compose([
-        T.ToUndirected(),
         FlattenLabels(),
         random_split
     ])
     if data_name == "ogbn-arxiv":
-        dataset = PygNodePropPredDataset(root=root, name=data_name, transform=transform)
+        dataset = PygNodePropPredDataset(root=root, name=data_name, transform=T.Compose([T.ToUndirected(), transform]))
     elif data_name in ["Cora", "CiteSeers", "PubMed"]:
-        dataset = Planetoid(root, data_name, transform=transform)
+        dataset = Planetoid(root, data_name, transform=T.Compose([T.ToUndirected(), transform]))
     elif data_name in ["Computers", "Photo"]:
         dataset = Amazon(root, data_name, transform=transform)
     elif data_name == 'Reddit':
@@ -80,7 +79,7 @@ def load_multi_graph_data(configs, data_name, k_shot, num_splits, num_val=0.1, n
     """Just for single class classification"""
     root = configs.root
     if data_name in ["PROTEINS", "MUTAG"]:
-        dataset = TUDataset(root, data_name)
+        dataset = TUDataset(root, data_name, transform=T.ToUndirected())
     elif data_name in ["HIV", "PCBA"]:
         dataset = MoleculeNet(root, data_name)
     elif data_name == "CSL":

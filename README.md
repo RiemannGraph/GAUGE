@@ -1,4 +1,4 @@
-# INNERATE: Are Common Substructures Transferable? Understanding Transferability in Graph Pretraining under Riemannian Geometry
+# GAUGE: Are Common Substructures Transferable? Understanding Transferability in Graph Pretraining under Riemannian Geometry
 
 ## Get Started
 
