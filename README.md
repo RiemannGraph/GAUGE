@@ -28,12 +28,12 @@ with the file name of checkpoint that needed to use;
 ```${METRIC}$``` in [```acc```, ```auc```, ```ap```,```mse```,```mae```];
 ```$K_SHOT$``` with ```1, 5``` or other number you want to transfer.
 
-## INNERATE FrameWork
+## GAUGE FrameWork
 <div align=center>
-<img src="./pics/framework.png" width=100% alt="INNERATE" title="INNERATE" >
+<img src="./pics/framework.png" width=100% alt="GAUGE" title="GAUGE" >
 </div>
 <div align=center>
-Figure 1. An Illustration of INNERATE Framework.
+Figure 1. An Illustration of GAUGE Framework.
 </div>
 
 ## Visualization
