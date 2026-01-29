@@ -31,7 +31,7 @@ def transfer_main(remaining_argv=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Pretrain or Adaption Command")
-    parser.add_argument("--run_type", type=str, default="adapt", choices=["pretrain", "adapt"])
+    parser.add_argument("--run_type", type=str, default="pretrain", choices=["pretrain", "adapt"])
     args, remaining_argv = parser.parse_known_args()
     if args.run_type == "pretrain":
         pretrain_main(remaining_argv)
