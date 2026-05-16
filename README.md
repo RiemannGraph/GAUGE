@@ -1,4 +1,4 @@
-# GAUGE: Are Common Substructures Transferable? Understanding Transferability in Graph Pretraining under Riemannian Geometry
+# GAUGE: Are Common Substructures Transferable? Riemannian Graph Foundation Model with Neural Vector Bundles [ICML 2026]
 
 ## Get Started
 
@@ -36,6 +36,14 @@ with the file name of checkpoint that needed to use;
 Figure 1. An Illustration of GAUGE Framework.
 </div>
 
+## Experimental results
+<div align=center>
+<img src="./pics/tab.png" width=100% alt="GAUGE" title="GAUGE" >
+</div>
+<div align=center>
+Figure 2. Main Results on Cross-Domain Transfer. 
+</div>
+
 ## Visualization
 <div style="display: flex; justify-content: space-between; align-items: center;">
   <img src="pics/tree.png" alt="" style="width: 100%; margin-right: 1%;">
@@ -53,5 +61,7 @@ Figure 1. An Illustration of GAUGE Framework.
   <img src="pics/star.png" alt="" style="width: 100%; margin-right: 1%;">
 </div>
 <div align=center>
-Figure 2. Visualization on tree, grid, path and star graphs.
+Figure 3. Visualization on tree, grid, path and star graphs.
 </div>
+
+## Citation
