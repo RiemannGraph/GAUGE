@@ -65,3 +65,12 @@ Figure 3. Visualization on tree, grid, path and star graphs.
 </div>
 
 ## Citation
+```
+@inproceedings{
+sun2026are,
+title={Are Common Substructures Transferable? Riemannian Graph Foundation Model with Neural Vector Bundles},
+author={Li Sun, Zhenhao Huang, Yiding Wang, Qin Chen, Pietro Li\`o, Philip S. Yu},
+booktitle={Forty-third International Conference on Machine Learning},
+year={2026}
+}
+```
